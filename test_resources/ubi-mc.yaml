@@ -1,0 +1,17 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  labels:
+    machineconfiguration.openshift.io/role: worker 
+  name: enable-crio
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    systemd:
+      units:
+      - dropins:
+        - contents: |
+            [Service]
+            Environment="ENABLE_PROFILE_UNIX_SOCKET=true"
+          name: 10-mco-profile-unix-socket.conf
