@@ -10,4 +10,4 @@ FROM registry.access.redhat.com/ubi8/ubi-minimal:8.5
 
 COPY --from=builder /opt/app-root/node-observability-agent ./
 
-ENTRYPOINT ["./node-observability-agent", "--tokenFile", "/var/run/secrets/kubernetes.io/serviceaccount/token", "--storage", "/host/tmp/pprofs/"]
+ENTRYPOINT ["sh", "-c", "./node-observability-agent --tokenFile /var/run/secrets/kubernetes.io/serviceaccount/token --storage /host/tmp/pprofs/ --node $NODE_IP"]

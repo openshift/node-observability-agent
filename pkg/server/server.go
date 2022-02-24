@@ -13,13 +13,15 @@ var slog = logrus.WithField("module", "server")
 
 type Config struct {
 	Port           int
-	TokenFile      string
+	Token          string
+	NodeIP         string
 	StorageFolder  string
 	CrioUnixSocket string
 }
 
 func Start(cfg Config) {
-	router := setupRoutes(cfg.TokenFile, cfg.StorageFolder, cfg.CrioUnixSocket)
+
+	router := setupRoutes(cfg)
 
 	// Clients must use TLS 1.2 or higher
 	tlsConfig := &tls.Config{
@@ -35,6 +37,8 @@ func Start(cfg Config) {
 	}
 
 	slog.Infof("listening on http://:%d", cfg.Port)
+	slog.Infof("targetting node %s", cfg.NodeIP)
+
 	panic(httpServer.ListenAndServe())
 
 }

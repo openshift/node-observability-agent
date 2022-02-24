@@ -3,7 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"net"
 	"os"
+	"syscall"
 
 	"github.com/sherine-k/node-observability-agent/pkg/server"
 	log "github.com/sirupsen/logrus"
@@ -13,6 +16,7 @@ var (
 	version       = "unknown"
 	app           = "node-observability-agent"
 	port          = flag.Int("port", 9000, "server port to listen on (default: 9000)")
+	node          = flag.String("node", "127.0.0.1", "IP address of the node on which to perform the profiling")
 	storageFolder = flag.String("storage", "/tmp/pprofs/", "folder to which the pprof files are saved")
 	tokenFile     = flag.String("tokenFile", "", "file containing token to be used for kubelet profiling http request")
 	crioSocket    = flag.String("crioUnixSocket", "/var/run/crio/crio.sock", "file referring to the unix socket to be used for CRIO profiling")
@@ -38,10 +42,47 @@ func main() {
 	log.SetLevel(lvl)
 	log.Infof("Starting %s at log level %s", appVersion, *logLevel)
 
+	checkParameters(*tokenFile, *node, *storageFolder, *crioSocket)
+
+	token, err := readTokenFile(*tokenFile)
+	if err != nil {
+		panic("Unable to read token file")
+	}
+
 	server.Start(server.Config{
 		Port:           *port,
-		TokenFile:      *tokenFile,
+		Token:          token,
 		StorageFolder:  *storageFolder,
 		CrioUnixSocket: *crioSocket,
+		NodeIP:         *node,
 	})
+}
+
+func checkParameters(tokenFile string, nodeIP string, storageFolder string, crioUnixSocket string) {
+	//check on configs that are passed along before starting up the server
+	//1. token is readable
+	_, err := readTokenFile(tokenFile)
+	if err != nil {
+		panic("Unable to read token file")
+	}
+	//2. nodeIP is found
+	if nodeIP == "" && net.ParseIP(nodeIP) == nil {
+		panic("Environment variable NODE_IP not found, or doesnt contain a valid IP address")
+	}
+	//3. StorageFolder is accessible in readwrite
+	if syscall.Access(storageFolder, syscall.O_RDWR) != nil {
+		panic("Unable to access the folder specified for saving the profiling data - no write permission :" + storageFolder)
+	}
+	//4. CRIO socket is accessible in readwrite
+	if syscall.Access(crioUnixSocket, syscall.O_RDWR) != nil {
+		panic("Unable to access the the crio socket - no write permission :" + crioUnixSocket)
+	}
+}
+
+func readTokenFile(tokenFile string) (string, error) {
+	content, err := ioutil.ReadFile(tokenFile)
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
 }

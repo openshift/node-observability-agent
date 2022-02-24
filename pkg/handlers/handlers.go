@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"os"
-
 	"github.com/sirupsen/logrus"
 )
 
@@ -15,15 +13,11 @@ type Handlers struct {
 	CrioUnixSocket string
 }
 
-func NewHandlers(token string, storageFolder string, crioUnixSocket string) *Handlers {
-	//Get env var NODE_IP
-	node := os.Getenv("NODE_IP")
-	if node == "" {
-		panic("Did not find environment variable $NODE_IP")
-	}
+func NewHandlers(token string, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers {
+
 	return &Handlers{
 		Token:          token,
-		NodeIP:         node,
+		NodeIP:         nodeIP,
 		StorageFolder:  storageFolder,
 		CrioUnixSocket: crioUnixSocket,
 	}
