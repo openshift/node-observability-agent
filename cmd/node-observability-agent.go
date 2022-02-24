@@ -15,6 +15,7 @@ var (
 	port          = flag.Int("port", 9000, "server port to listen on (default: 9000)")
 	storageFolder = flag.String("storage", "/tmp/pprofs/", "folder to which the pprof files are saved")
 	tokenFile     = flag.String("tokenFile", "", "file containing token to be used for kubelet profiling http request")
+	crioSocket    = flag.String("crioUnixSocket", "/var/run/crio/crio.sock", "file referring to the unix socket to be used for CRIO profiling")
 	logLevel      = flag.String("loglevel", "info", "log level")
 	versionFlag   = flag.Bool("v", false, "print version")
 	appVersion    = fmt.Sprintf("%s %s", app, version)
@@ -38,8 +39,9 @@ func main() {
 	log.Infof("Starting %s at log level %s", appVersion, *logLevel)
 
 	server.Start(server.Config{
-		Port:          *port,
-		TokenFile:     *tokenFile,
-		StorageFolder: *storageFolder,
+		Port:           *port,
+		TokenFile:      *tokenFile,
+		StorageFolder:  *storageFolder,
+		CrioUnixSocket: *crioSocket,
 	})
 }

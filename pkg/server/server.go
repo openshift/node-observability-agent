@@ -12,13 +12,14 @@ import (
 var slog = logrus.WithField("module", "server")
 
 type Config struct {
-	Port          int
-	TokenFile     string
-	StorageFolder string
+	Port           int
+	TokenFile      string
+	StorageFolder  string
+	CrioUnixSocket string
 }
 
 func Start(cfg Config) {
-	router := setupRoutes(cfg.TokenFile, cfg.StorageFolder)
+	router := setupRoutes(cfg.TokenFile, cfg.StorageFolder, cfg.CrioUnixSocket)
 
 	// Clients must use TLS 1.2 or higher
 	tlsConfig := &tls.Config{

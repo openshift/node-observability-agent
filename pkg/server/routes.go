@@ -7,12 +7,12 @@ import (
 	"github.com/sherine-k/node-observability-agent/pkg/handlers"
 )
 
-func setupRoutes(tokenFile string, storageFolder string) *mux.Router {
+func setupRoutes(tokenFile string, storageFolder string, crioUnixSocket string) *mux.Router {
 	token, err := readTokenFile(tokenFile)
 	if err != nil {
 		panic("Unable to read token file")
 	}
-	h := handlers.NewHandlers(token, storageFolder)
+	h := handlers.NewHandlers(token, storageFolder, crioUnixSocket)
 	r := mux.NewRouter()
 	r.HandleFunc("/crio/profiling", h.ProfileCrio)
 	r.HandleFunc("/kubelet/profiling", h.ProfileKubelet)

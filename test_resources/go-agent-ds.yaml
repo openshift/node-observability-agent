@@ -3,8 +3,8 @@ kind: DaemonSet
 metadata:
   annotations:
   labels:
-    app: go-ubi
-  name: go-ubi
+    app: go-agent
+  name: go-agent
   namespace: test-project
 spec:
   progressDeadlineSeconds: 600
@@ -12,7 +12,7 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app: go-ubi
+      app: go-agent
   strategy:
     rollingUpdate:
       maxSurge: 25%
@@ -22,13 +22,13 @@ spec:
     metadata:
       creationTimestamp: null
       labels:
-        app: go-ubi
+        app: go-agent
     spec:
 
       containers:
       - image: quay.io/skhoury/node-observability-agent:go-latest
         imagePullPolicy: Always
-        name: go-crio
+        name: go-agent
         resources: {}
         securityContext:
           privileged: true 
