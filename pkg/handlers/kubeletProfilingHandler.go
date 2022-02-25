@@ -2,12 +2,18 @@ package handlers
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"time"
 )
 
-func (h *Handlers) ProfileKubelet(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ProfileKubelet() Run {
+	run := Run{
+		Type:      "Kubelet",
+		BeginDate: time.Now(),
+	}
 	//TODO Go back to securely making this request
 	//Prepare http client that ignores tls check
 	transCfg := &http.Transport{
@@ -19,41 +25,32 @@ func (h *Handlers) ProfileKubelet(w http.ResponseWriter, r *http.Request) {
 	req, err := http.NewRequest("GET", "https://"+h.NodeIP+":10250/debug/pprof/profile", nil)
 	req.Header.Add("Authorization", "Bearer "+h.Token)
 	if err != nil {
-		hlog.Errorf("Error preparing http request https://%s:10250/debug/pprof/profile: %v", h.NodeIP, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err = w.Write([]byte("Error preparing http request  https://" + h.NodeIP + ":10250/debug/pprof/profile"))
-		hlog.Errorf("Error preparing request %v", err)
-		return
+		run.EndDate = time.Now()
+		run.Error = fmt.Errorf("error preparing http request https://%s:10250/debug/pprof/profile: %v", h.NodeIP, err)
+		return run
 	}
 	//Handle HTTP Req
 	res, err := client.Do(req)
 	if err != nil {
-		hlog.Errorf("Error with HTTP request for kubelet profiling https://%s:10250/debug/pprof/profile: %v", h.NodeIP, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err = w.Write([]byte("Error with HTTP request for kubelet profiling https://" + h.NodeIP + ":10250/debug/pprof/profile"))
-		hlog.Errorf("Error writing response to profiling request %v", err)
-		return
+		run.EndDate = time.Now()
+		run.Error = fmt.Errorf("error with HTTP request for kubelet profiling https://%s:10250/debug/pprof/profile: %v", h.NodeIP, err)
+		return run
 	}
 
 	defer res.Body.Close()
 	out, err := os.Create(h.StorageFolder + "kubelet.pprof")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err = w.Write([]byte("Error creating file to save result of kubelet profiling for node" + h.NodeIP))
-		hlog.Errorf("Error reading file to save result of kubelet profiling for node %s: %v", h.NodeIP, err)
-		return
+		run.EndDate = time.Now()
+		run.Error = fmt.Errorf("error creating file to save result of kubelet profiling for node %s: %w", h.NodeIP, err)
+		return run
 	}
 	defer out.Close()
 	_, err = io.Copy(out, res.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err = w.Write([]byte("Error saving result of kubelet profiling for node" + h.NodeIP))
-		hlog.Errorf("Error saving result of kubelet profiling for node %s: %v", h.NodeIP, err)
-		return
+		run.EndDate = time.Now()
+		run.Error = fmt.Errorf("error saving result of kubelet profiling for node %s: %v", h.NodeIP, err)
+		return run
 	}
-
-	_, err = w.Write([]byte("Successfullly sent profiling request and saved results to " + h.StorageFolder))
-	if err != nil {
-		hlog.Errorf("could not write response: %v", err)
-	}
+	run.EndDate = time.Now()
+	return run
 }

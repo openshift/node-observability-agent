@@ -9,7 +9,7 @@ func setupRoutes(cfg Config) *mux.Router {
 
 	h := handlers.NewHandlers(cfg.Token, cfg.StorageFolder, cfg.CrioUnixSocket, cfg.NodeIP)
 	r := mux.NewRouter()
-	r.HandleFunc("/crio/profiling", h.ProfileCrio)
-	r.HandleFunc("/kubelet/profiling", h.ProfileKubelet)
+	r.HandleFunc("/pprof", h.HandleProfiling)
+	r.HandleFunc("/status", h.Status)
 	return r
 }
