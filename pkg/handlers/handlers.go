@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
@@ -92,8 +93,13 @@ func createAndSendUID(w http.ResponseWriter, r *http.Request) (Run, error) {
 }
 
 func writeRunToFile(run Run, storageFolder string, fileType FileType) string {
+	var fileName string
+	if fileType == LogFile {
+		fileName = storageFolder + run.ID.String() + "." + string(fileType)
+	} else {
+		fileName = storageFolder + "agent." + string(fileType)
+	}
 
-	fileName := storageFolder + run.ID.String() + "." + string(fileType)
 	bytes, err := json.Marshal(run)
 	if err != nil {
 		panic("error while creating " + string(fileType) + " file : unable to marshal run of ID" + run.ID.String() + "\n" + err.Error())
@@ -105,9 +111,88 @@ func writeRunToFile(run Run, storageFolder string, fileType FileType) string {
 	return fileName
 }
 
+func fileExists(fileName string) bool {
+	//TODO return and handle errors better
+	if _, err := os.Stat(fileName); err != nil {
+		return false
+	} else {
+		return true
+	}
+}
+
+func readUidFromFile(fileName string) (string, error) {
+	var run *Run = &Run{}
+	contents, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return "", err
+	}
+	err = json.Unmarshal(contents, run)
+	if err != nil {
+		return "", err
+	}
+	return run.ID.String(), nil
+}
+
+func respondBusyOrError(uid string, w http.ResponseWriter, r *http.Request, isError bool) error {
+
+	message := ""
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Server does not support Flusher!",
+			http.StatusInternalServerError)
+		return fmt.Errorf("no support for Flusher")
+	}
+
+	w.WriteHeader(http.StatusConflict)
+	if isError {
+		message = uid + " failed."
+	} else {
+		message = uid + " still running"
+	}
+	_, err := w.Write([]byte(message))
+	if err != nil {
+		hlog.Errorf("Unable to send HTTP response : %v", err)
+		return err
+	}
+	flusher.Flush()
+	return nil
+}
+
 func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
-	// Channel for collecting results of profiling
-	runResultsChan := make(chan ProfilingRun)
+
+	if fileExists(h.StorageFolder + "agent." + string(LockFile)) {
+		uid, err := readUidFromFile(h.StorageFolder + "agent." + string(LockFile))
+		if err != nil {
+			http.Error(w, "unable to read lock file",
+				http.StatusInternalServerError)
+			hlog.Error("Unable to read lock file")
+			return
+		}
+		err = respondBusyOrError(uid, w, r, false)
+		if err != nil {
+			http.Error(w, "unable to send response",
+				http.StatusInternalServerError)
+			hlog.Error("unable to send response")
+			return
+		}
+		return
+	} else if fileExists(h.StorageFolder + "agent." + string(ErrorFile)) {
+		uid, err := readUidFromFile(h.StorageFolder + "agent." + string(ErrorFile))
+		if err != nil {
+			http.Error(w, "unable to read lock file",
+				http.StatusInternalServerError)
+			hlog.Error("Unable to read lock file")
+			return
+		}
+		err = respondBusyOrError(uid, w, r, true)
+		if err != nil {
+			http.Error(w, "unable to send response",
+				http.StatusInternalServerError)
+			hlog.Error("unable to send response")
+			return
+		}
+		return
+	}
 
 	// Send a HTTP 200 straight away
 	run, err := createAndSendUID(w, r)
@@ -118,6 +203,9 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 
 	// Create a lock file with a begin date and a uid
 	lockFile := writeRunToFile(run, h.StorageFolder, LockFile)
+
+	// Channel for collecting results of profiling
+	runResultsChan := make(chan ProfilingRun)
 
 	// Launch both profilings in parallel
 	go func() {
@@ -145,7 +233,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 	// replace the lock file by error file in case of errors
 	if errorMessage.Len() > 0 {
 		hlog.Error(errorMessage.String())
-		err = os.Rename(lockFile, h.StorageFolder+run.ID.String()+string(ErrorFile))
+		err = os.Rename(lockFile, h.StorageFolder+"agent."+string(ErrorFile))
 		if err != nil {
 			hlog.Errorf("Unable to rename lock file into error file for run %s: %v", run.ID.String(), err)
 		}
