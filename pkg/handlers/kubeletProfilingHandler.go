@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func (h *Handlers) ProfileKubelet() ProfilingRun {
+func (h *Handlers) ProfileKubelet(uid string) ProfilingRun {
 	run := ProfilingRun{
 		Type:      KubeletRun,
 		BeginDate: time.Now(),
@@ -38,7 +38,7 @@ func (h *Handlers) ProfileKubelet() ProfilingRun {
 	}
 
 	defer res.Body.Close()
-	out, err := os.Create(h.StorageFolder + "kubelet.pprof")
+	out, err := os.Create(h.StorageFolder + "kubelet-" + uid + ".pprof")
 	if err != nil {
 		run.EndDate = time.Now()
 		run.Error = fmt.Errorf("error creating file to save result of kubelet profiling for node %s: %w", h.NodeIP, err)
@@ -52,5 +52,6 @@ func (h *Handlers) ProfileKubelet() ProfilingRun {
 		return run
 	}
 	run.EndDate = time.Now()
+	run.Sucessful = true
 	return run
 }

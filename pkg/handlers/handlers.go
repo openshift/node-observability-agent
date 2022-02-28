@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -62,9 +63,17 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 }
 
 func createAndSendUID(w http.ResponseWriter, r *http.Request) (Run, error) {
+
 	id := uuid.New()
 	response := Run{
 		ID: id,
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Server does not support Flusher!",
+			http.StatusInternalServerError)
+		return response, fmt.Errorf("no support for Flusher")
 	}
 
 	jsResponse, err := json.Marshal(response)
@@ -78,12 +87,13 @@ func createAndSendUID(w http.ResponseWriter, r *http.Request) (Run, error) {
 	if err != nil {
 		hlog.Errorf("Unable to send HTTP response : %v", err)
 	}
+	flusher.Flush()
 	return response, nil
 }
 
 func writeRunToFile(run Run, storageFolder string, fileType FileType) string {
 
-	fileName := storageFolder + run.ID.String() + string(fileType)
+	fileName := storageFolder + run.ID.String() + "." + string(fileType)
 	bytes, err := json.Marshal(run)
 	if err != nil {
 		panic("error while creating " + string(fileType) + " file : unable to marshal run of ID" + run.ID.String() + "\n" + err.Error())
@@ -111,11 +121,11 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 
 	// Launch both profilings in parallel
 	go func() {
-		runResultsChan <- h.ProfileKubelet()
+		runResultsChan <- h.ProfileKubelet(run.ID.String())
 	}()
 
 	go func() {
-		runResultsChan <- h.ProfileCrio()
+		runResultsChan <- h.ProfileCrio(run.ID.String())
 	}()
 
 	// wait for the results
@@ -143,9 +153,9 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// no errors : simply log the results simply and rename lock to log
+	// no errors : simply log the results and rename lock to log
 	hlog.Info(logMessage.String())
-	err = os.Rename(lockFile, h.StorageFolder+run.ID.String()+string(LogFile))
+	err = os.Rename(lockFile, h.StorageFolder+run.ID.String()+"."+string(LogFile))
 	if err != nil {
 		hlog.Errorf("Unable to rename lock file into log file for run %s: %v", run.ID.String(), err)
 	}
