@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-func (h *Handlers) ProfileCrio() Run {
+func (h *Handlers) ProfileCrio() ProfilingRun {
 	//curl --unix-socket /var/run/crio/crio.sock http://localhost/debug/pprof/profile > /mnt/prof.out
 	var stderr bytes.Buffer
-	run := Run{
-		Type:      "CRIO",
+	run := ProfilingRun{
+		Type:      CRIORun,
 		BeginDate: time.Now(),
 	}
 

@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-func (h *Handlers) ProfileKubelet() Run {
-	run := Run{
-		Type:      "Kubelet",
+func (h *Handlers) ProfileKubelet() ProfilingRun {
+	run := ProfilingRun{
+		Type:      KubeletRun,
 		BeginDate: time.Now(),
 	}
 	//TODO Go back to securely making this request

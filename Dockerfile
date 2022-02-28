@@ -1,5 +1,5 @@
-FROM registry.access.redhat.com/ubi8/go-toolset:1.15.14-14 as builder
-ARG VERSION=""
+FROM registry.access.redhat.com/ubi8/go-toolset:1.16.12-4 as builder
+ARG VERSION="1.17"
 
 WORKDIR /opt/app-root
 COPY . .
