@@ -216,6 +216,11 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		runResultsChan <- h.ProfileCrio(run.ID.String())
 	}()
 
+	go func() {
+		processResults(run, lockFile, h.StorageFolder, runResultsChan)
+	}()
+}
+func processResults(run Run, lockFile string, storageFolder string, runResultsChan chan ProfilingRun) {
 	// wait for the results
 	run.ProfilingRuns = []ProfilingRun{<-runResultsChan, <-runResultsChan}
 
@@ -233,19 +238,19 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 	// replace the lock file by error file in case of errors
 	if errorMessage.Len() > 0 {
 		hlog.Error(errorMessage.String())
-		err = os.Rename(lockFile, h.StorageFolder+"agent."+string(ErrorFile))
+		err := os.Rename(lockFile, storageFolder+"agent."+string(ErrorFile))
 		if err != nil {
 			hlog.Errorf("Unable to rename lock file into error file for run %s: %v", run.ID.String(), err)
 		}
-		writeRunToFile(run, h.StorageFolder, ErrorFile)
+		writeRunToFile(run, storageFolder, ErrorFile)
 		return
 	}
 
 	// no errors : simply log the results and rename lock to log
 	hlog.Info(logMessage.String())
-	err = os.Rename(lockFile, h.StorageFolder+run.ID.String()+"."+string(LogFile))
+	err := os.Rename(lockFile, storageFolder+run.ID.String()+"."+string(LogFile))
 	if err != nil {
 		hlog.Errorf("Unable to rename lock file into log file for run %s: %v", run.ID.String(), err)
 	}
-	writeRunToFile(run, h.StorageFolder, LogFile)
+	writeRunToFile(run, storageFolder, LogFile)
 }
