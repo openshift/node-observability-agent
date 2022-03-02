@@ -46,7 +46,7 @@ func main() {
 
 	token, err := readTokenFile(*tokenFile)
 	if err != nil {
-		panic("Unable to read token file")
+		panic("Unable to read token file, or token is empty :" + err.Error())
 	}
 
 	server.Start(server.Config{
@@ -66,7 +66,7 @@ func checkParameters(tokenFile string, nodeIP string, storageFolder string, crio
 		panic("Unable to read token file")
 	}
 	//2. nodeIP is found
-	if nodeIP == "" && net.ParseIP(nodeIP) == nil {
+	if nodeIP == "" || net.ParseIP(nodeIP) == nil {
 		panic("Environment variable NODE_IP not found, or doesnt contain a valid IP address")
 	}
 	//3. StorageFolder is accessible in readwrite
@@ -83,6 +83,9 @@ func readTokenFile(tokenFile string) (string, error) {
 	content, err := ioutil.ReadFile(tokenFile)
 	if err != nil {
 		return "", err
+	}
+	if len(content) <= 0 {
+		return "", fmt.Errorf("%s was empty", tokenFile)
 	}
 	return string(content), nil
 }
