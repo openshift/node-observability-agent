@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  annotations:
+  labels:
+    app: ubi
+  name: ubi
+  namespace: test-project
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: ubi
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: ubi
+    spec:
+      #securityContext:
+      #  fsGroup: 0
+      initContainers:
+      - command:
+        - /bin/bash
+        - -c
+        - /usr/local/bin/profile-crio.sh
+        image: quay.io/skhoury/node-observability-agent:latest
+        imagePullPolicy: Always
+        name: crio-profiler
+        resources: {}
+        securityContext:
+          privileged: true 
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        env:
+        - name: NODE_IP
+          valueFrom:
+            fieldRef: 
+              fieldPath: status.hostIP
+        volumeMounts:
+        - mountPath: /var/run/crio/crio.sock
+          name: socket
+          readOnly: false
+        - mountPath: /host/tmp/pprofs
+          name: dumpster
+          readOnly: false
+      - command:
+        - /bin/bash
+        - -c
+        - /usr/local/bin/profile-kubelet.sh
+        image: quay.io/skhoury/node-observability-agent:latest
+        imagePullPolicy: Always
+        name: kubelet-profiler
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        env:
+        - name: NODE_IP
+          valueFrom:
+            fieldRef: 
+              fieldPath: status.hostIP
+        volumeMounts:
+        - mountPath: /host/tmp/pprofs
+          name: dumpster
+          readOnly: false
+      containers:
+      - command:
+        - /bin/bash
+        - -c
+        - /usr/local/bin/sleep.sh
+        image: quay.io/skhoury/node-observability-agent:latest
+        imagePullPolicy: Always
+        name: dummy-sleep
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+        #priviledged: true
+      serviceAccountName: ubi-sa
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - persistentVolumeClaim:
+          claimName: pv0002
+        name: dumpster
+      - hostPath:
+          path: /var/run/crio/crio.sock
+          type: Socket
+        name: socket
+
