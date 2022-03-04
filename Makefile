@@ -23,26 +23,26 @@ vendors:
 fmt:
 	go fmt -mod vendor ./...
 
-.PHONY: lint
-lint:  
+#.PHONY: lint
+#lint:  
 ## Checks the code with golangci-lint
-lint: $(GOLANGCI_LINT_BIN)
-	$(GOLANGCI_LINT_BIN) run -c .golangci.yaml --deadline=30m
+#lint: $(GOLANGCI_LINT_BIN)
+#	$(GOLANGCI_LINT_BIN) run -c .golangci.yaml --deadline=30m
 
-$(GOLANGCI_LINT_BIN):
-	mkdir -p $(BIN_DIR)
-	hack/golangci-lint.sh $(GOLANGCI_LINT_BIN)
+#$(GOLANGCI_LINT_BIN):
+#	mkdir -p $(BIN_DIR)
+#	hack/golangci-lint.sh $(GOLANGCI_LINT_BIN)
 
 .PHONY: test
-test: vendor fmt lint
+test: vendor fmt #lint
 	@echo "### Testing"
 	go test -mod vendor ./... -coverprofile ${COVERPROFILE}
 
 .PHONY: verify
-verify: lint test 
+verify: test #lint test 
 
 .PHONY: build.go
-build.go: vendor fmt lint
+build.go: vendor fmt #lint
 	@echo "### Building"
 	go build -mod vendor -o node-observability-agent cmd/node-observability-agent.go
 
