@@ -19,6 +19,11 @@ It accepts requests for the following endpoints:
 
 The agent can be run locally but is best run in a pod on a Kubernetes cluster.
 
+```bash
+$ kubectl kustomize test_resources/default/ | kubectl apply -f -
+$ kubectl port-forward svc/go-agt-svc 8080:80
+```
+
 
 E.g.:
 

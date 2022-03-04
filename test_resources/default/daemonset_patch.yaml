@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-observability-agent
+spec:
+  template:
+    spec:
+      containers:
+      - name: node-observability-agent
+        securityContext:
+          privileged: true 
+        volumeMounts:
+        - name: dumpster
+          mountPath: /host/tmp/pprofs
+          readOnly: false
+      volumes:
+      - name: dumpster
+        persistentVolumeClaim:
+          claimName: pv0002
