@@ -12,10 +12,10 @@ TARGET_REPO ?= quay.io/skhoury
 GOLANGCI_LINT_VERSION = v1.42.1
 COVERPROFILE = coverage.out
 
-.PHONY: prereqs
-prereqs:
-	@echo "### Test if prerequisites are met, and installing missing dependencies"
-	test -f $(go env GOPATH)/bin/golangci-lint || go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+#.PHONY: prereqs
+#prereqs:
+#	@echo "### Test if prerequisites are met, and installing missing dependencies"
+#	test -f $(go env GOPATH)/bin/golangci-lint || go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 
 .PHONY: vendors
 vendors:
@@ -26,21 +26,21 @@ vendors:
 fmt:
 	go fmt -mod vendor ./...
 
-.PHONY: lint
-lint: prereqs 
-	@echo "### Linting code"
-	golangci-lint run ./...
+#.PHONY: lint
+#lint: prereqs 
+#	@echo "### Linting code"
+#	golangci-lint run ./...
 
 .PHONY: test
-test: vendor fmt lint
+test: vendor fmt #lint
 	@echo "### Testing"
 	go test -mod vendor ./... -coverprofile ${COVERPROFILE}
 
 .PHONY: verify
-verify: lint test
+verify: test #lint
 
 .PHONY: build.go
-build.go: vendor fmt lint
+build.go: vendor fmt #lint
 	@echo "### Building"
 	go build -mod vendor -o node-observability-agent cmd/node-observability-agent.go
 
