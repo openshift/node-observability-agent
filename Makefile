@@ -27,7 +27,7 @@ fmt:
 	go fmt -mod vendor ./...
 
 .PHONY: lint
-lint: 
+lint: prereqs 
 	@echo "### Linting code"
 	golangci-lint run ./...
 
