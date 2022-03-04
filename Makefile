@@ -32,7 +32,7 @@ lint: prereqs
 	golangci-lint run ./...
 
 .PHONY: test
-test:
+test: vendor fmt lint
 	@echo "### Testing"
 	go test ./... -coverprofile ${COVERPROFILE}
 
@@ -40,14 +40,18 @@ test:
 verify: lint test
 
 .PHONY: build.go
-build.go:
+build.go: vendor fmt lint
 	@echo "### Building"
 	go build -mod vendor -o node-observability-agent cmd/node-observability-agent.go
 
-all: prereqs vendors fmt lint build.go test verify build.image push.image
+.PHONY: noa
+noa: build.image push.image
 
-build.image:
+.PHONY: build.image
+build.image: build.go verify
 	$(CONTAINER_ENGINE) build -t ${IMG} .
-push.image:
+
+.PHONY: push.image
+push.image: build.image
 	$(CONTAINER_ENGINE) tag ${IMG} quay.io/skhoury/${IMG}
 	$(CONTAINER_ENGINE) push ${TARGET_REPO}/${IMG}
