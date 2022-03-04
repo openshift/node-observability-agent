@@ -51,7 +51,7 @@ func TestStatus(t *testing.T) {
 			if tc.isError {
 				// prepare an error file
 				errorFile := "/tmp/agent.err"
-				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Sucessful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Sucessful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
+				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
 				err := os.WriteFile(errorFile, []byte(fileContent), 0644)
 				if err != nil {
 					t.Error(err)
@@ -143,7 +143,7 @@ func TestErrorFileExists(t *testing.T) {
 			if tc.expected {
 				// prepare an error file
 				errorFile := "/tmp/agent.err"
-				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Sucessful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Sucessful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
+				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
 				err := os.WriteFile(errorFile, []byte(fileContent), 0644)
 				if err != nil {
 					t.Error(err)
@@ -195,7 +195,7 @@ func TestReadUidFromFile(t *testing.T) {
 	}()
 	// prepare an error file
 	unmarshallableErrorFile := "/tmp/KOagent.err"
-	unmarshallableContent := "{\"ID dd37122b-daaf-4d75-9250-c0747e9c5c47\",\"ProfilingRuns\":{\"Type\":\"Kubelet\",\"Sucessful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Sucessful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
+	unmarshallableContent := "{\"ID dd37122b-daaf-4d75-9250-c0747e9c5c47\",\"ProfilingRuns\":{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
 	err = os.WriteFile(unmarshallableErrorFile, []byte(unmarshallableContent), 0644)
 	if err != nil {
 		t.Error(err)

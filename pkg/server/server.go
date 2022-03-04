@@ -37,7 +37,7 @@ func Start(cfg Config) {
 	}
 
 	slog.Infof("listening on http://:%d", cfg.Port)
-	slog.Infof("targetting node %s", cfg.NodeIP)
+	slog.Infof("targeting node %s", cfg.NodeIP)
 
 	panic(httpServer.ListenAndServe())
 

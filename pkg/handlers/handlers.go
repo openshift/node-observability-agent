@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -37,11 +38,11 @@ const (
 )
 
 type ProfilingRun struct {
-	Type      RunType
-	Sucessful bool
-	BeginDate time.Time
-	EndDate   time.Time
-	Error     error
+	Type       RunType
+	Successful bool
+	BeginDate  time.Time
+	EndDate    time.Time
+	Error      error
 }
 
 type Run struct {
@@ -261,7 +262,25 @@ func (h *Handlers) processResults(run Run, runResultsChan chan ProfilingRun) {
 		h.onGoingRunId = ""
 	}()
 	// wait for the results
-	run.ProfilingRuns = []ProfilingRun{<-runResultsChan, <-runResultsChan}
+	run.ProfilingRuns = []ProfilingRun{}
+	isTimeout := false
+	for nb := 0; nb < 2 || isTimeout; {
+		select {
+		case pr := <-runResultsChan:
+			nb++
+			run.ProfilingRuns = append(run.ProfilingRuns, pr)
+		case <-time.After(time.Second * 35):
+			//timeout! dont wait anymore
+			run.ProfilingRuns = append(run.ProfilingRuns, ProfilingRun{
+				Type:       "",
+				Successful: false,
+				BeginDate:  time.Time{},
+				EndDate:    time.Time{},
+				Error:      errors.New("timeout"),
+			})
+			isTimeout = true
+		}
+	}
 
 	// Process the results
 	var errorMessage bytes.Buffer

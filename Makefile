@@ -10,12 +10,9 @@ endif
 IMG ?= node-observability-agent:go-latest
 TARGET_REPO ?= quay.io/skhoury
 GOLANGCI_LINT_VERSION = v1.42.1
+GOLANGCI_LINT_BIN=$(BIN_DIR)/golangci-lint
 COVERPROFILE = coverage.out
-
-#.PHONY: prereqs
-#prereqs:
-#	@echo "### Test if prerequisites are met, and installing missing dependencies"
-#	test -f $(go env GOPATH)/bin/golangci-lint || go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+BIN_DIR=$(shell pwd)/bin
 
 .PHONY: vendors
 vendors:
@@ -26,21 +23,26 @@ vendors:
 fmt:
 	go fmt -mod vendor ./...
 
-#.PHONY: lint
-#lint: prereqs 
-#	@echo "### Linting code"
-#	golangci-lint run ./...
+.PHONY: lint
+lint:  
+## Checks the code with golangci-lint
+lint: $(GOLANGCI_LINT_BIN)
+	$(GOLANGCI_LINT_BIN) run -c .golangci.yaml --deadline=30m
+
+$(GOLANGCI_LINT_BIN):
+	mkdir -p $(BIN_DIR)
+	hack/golangci-lint.sh $(GOLANGCI_LINT_BIN)
 
 .PHONY: test
-test: vendor fmt #lint
+test: vendor fmt lint
 	@echo "### Testing"
 	go test -mod vendor ./... -coverprofile ${COVERPROFILE}
 
 .PHONY: verify
-verify: test #lint
+verify: lint test 
 
 .PHONY: build.go
-build.go: vendor fmt #lint
+build.go: vendor fmt lint
 	@echo "### Building"
 	go build -mod vendor -o node-observability-agent cmd/node-observability-agent.go
 
