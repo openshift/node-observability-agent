@@ -24,17 +24,17 @@ vendors:
 
 .PHONY: fmt
 fmt:
-	go fmt ./...
+	go fmt -mod vendor ./...
 
 .PHONY: lint
-lint: prereqs
+lint: 
 	@echo "### Linting code"
 	golangci-lint run ./...
 
 .PHONY: test
 test: vendor fmt lint
 	@echo "### Testing"
-	go test ./... -coverprofile ${COVERPROFILE}
+	go test -mod vendor ./... -coverprofile ${COVERPROFILE}
 
 .PHONY: verify
 verify: lint test
