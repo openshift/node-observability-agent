@@ -26,7 +26,7 @@ spec:
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
-      serviceAccountName: ubi-sa
+      serviceAccountName: node-observability-agent
       terminationGracePeriodSeconds: 30
       volumes:
       - hostPath:

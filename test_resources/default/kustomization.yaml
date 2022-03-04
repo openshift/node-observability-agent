@@ -35,13 +35,13 @@ vars:
   objref:
     kind: ServiceAccount
     version: v1
-    name: ubi-sa
+    name: node-observability-agent
   fieldref:
     fieldpath: metadata.name
 - name: SERVICE_ACCOUNT_NAMESPACE
   objref:
     kind: ServiceAccount
     version: v1
-    name: ubi-sa
+    name: node-observability-agent
   fieldref:
     fieldpath: metadata.namespace

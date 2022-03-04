@@ -1,7 +1,7 @@
 kind: SecurityContextConstraints
 apiVersion: security.openshift.io/v1
 metadata:
-  name: scc-admin
+  name: node-observability-agent
 allowHostDirVolumePlugin: true
 allowHostIPC: false
 allowHostNetwork: true

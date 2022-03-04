@@ -10,10 +10,10 @@ spec:
         securityContext:
           privileged: true 
         volumeMounts:
-        - name: dumpster
+        - name: profiling-data
           mountPath: /host/tmp/pprofs
           readOnly: false
       volumes:
-      - name: dumpster
+      - name: profiling-data
         persistentVolumeClaim:
-          claimName: pv0002
+          claimName: node-observability-agent-profiling
