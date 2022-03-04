@@ -23,7 +23,7 @@ func (h *Handlers) ProfileCrio(uid string) ProfilingRun {
 	if err != nil {
 		run.Error = fmt.Errorf("error running CRIO profiling :\n%s", errStr)
 	} else {
-		run.Sucessful = true
+		run.Successful = true
 	}
 	return run
 }

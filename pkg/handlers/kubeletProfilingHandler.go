@@ -52,6 +52,6 @@ func (h *Handlers) ProfileKubelet(uid string) ProfilingRun {
 		return run
 	}
 	run.EndDate = time.Now()
-	run.Sucessful = true
+	run.Successful = true
 	return run
 }
