@@ -3,7 +3,7 @@ kind: MachineConfig
 metadata:
   labels:
     machineconfiguration.openshift.io/role: worker 
-  name: enable-crio
+  name: node-observability-agent-crio
 spec:
   config:
     ignition:

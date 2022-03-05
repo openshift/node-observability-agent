@@ -1,0 +1,47 @@
+# Adds namespace to all resources.
+namespace: node-observability
+
+# Value of this field is prepended to the
+# names of all resources, e.g. a deployment named
+# "wordpress" becomes "alices-wordpress".
+# Note that it should also match with the prefix (text before '-') of the namespace
+# field above.
+# namePrefix: openshift-node-observability
+
+# Labels to add to all resources and selectors.
+commonLabels:
+  app.kubernetes.io/component: node-observability-agent
+  app.kubernetes.io/name: openshift-node-observability
+
+configurations:
+- kustomizeconfig/serviceaccount.yaml
+
+resources:
+- daemonset.yaml
+- machine_config.yaml
+- pvc.yaml
+- rbac.yaml
+- sa.yaml
+- scc.yaml
+- service.yaml
+
+
+patchesStrategicMerge:
+- daemonset_patch.yaml
+- pvc_patch.yaml
+
+vars:
+- name: SERVICE_ACCOUNT_NAME
+  objref:
+    kind: ServiceAccount
+    version: v1
+    name: node-observability-agent
+  fieldref:
+    fieldpath: metadata.name
+- name: SERVICE_ACCOUNT_NAMESPACE
+  objref:
+    kind: ServiceAccount
+    version: v1
+    name: node-observability-agent
+  fieldref:
+    fieldpath: metadata.namespace
