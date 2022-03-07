@@ -1,6 +1,6 @@
-module github.com/sherine-k/node-observability-agent
+module github.com/openshift/node-observability-agent
 
-go 1.16
+go 1.17
 
 require (
 	github.com/google/uuid v1.3.0

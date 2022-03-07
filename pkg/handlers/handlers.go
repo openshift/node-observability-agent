@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/openshift/node-observability-agent/pkg/connectors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -244,11 +246,19 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 
 	// Launch both profilings in parallel as well as the routine to wait for results
 	go func() {
-		runResultsChan <- h.ProfileKubelet(run.ID.String())
+		//TODO Go back to securely making this request
+		//Prepare http client that ignores tls check
+		transCfg := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		client := &http.Client{Transport: transCfg}
+		runResultsChan <- h.ProfileKubelet(run.ID.String(), client)
 	}()
 
 	go func() {
-		runResultsChan <- h.ProfileCrio(run.ID.String())
+		connector := connectors.Connector{}
+		connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", h.StorageFolder + "crio-" + run.ID.String() + ".pprof"})
+		runResultsChan <- h.ProfileCrio(run.ID.String(), &connector)
 	}()
 
 	go func() {
