@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/gorilla/mux"
-	"github.com/sherine-k/node-observability-agent/pkg/handlers"
+	"github.com/openshift/node-observability-agent/pkg/handlers"
 )
 
 func setupRoutes(cfg Config) *mux.Router {

@@ -8,7 +8,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/sherine-k/node-observability-agent/pkg/server"
+	"github.com/openshift/node-observability-agent/pkg/server"
 	log "github.com/sirupsen/logrus"
 )
 

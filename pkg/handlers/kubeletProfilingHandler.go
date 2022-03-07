@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,17 +8,11 @@ import (
 	"time"
 )
 
-func (h *Handlers) ProfileKubelet(uid string) ProfilingRun {
+func (h *Handlers) ProfileKubelet(uid string, client *http.Client) ProfilingRun {
 	run := ProfilingRun{
 		Type:      KubeletRun,
 		BeginDate: time.Now(),
 	}
-	//TODO Go back to securely making this request
-	//Prepare http client that ignores tls check
-	transCfg := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: transCfg}
 
 	//Construct HTTP Req
 	req, err := http.NewRequest("GET", "https://"+h.NodeIP+":10250/debug/pprof/profile", nil)
@@ -37,8 +30,14 @@ func (h *Handlers) ProfileKubelet(uid string) ProfilingRun {
 		return run
 	}
 
+	if res.StatusCode != http.StatusOK {
+		run.EndDate = time.Now()
+		run.Error = fmt.Errorf("error with HTTP request for kubelet profiling https://%s:10250/debug/pprof/profile: statusCode %d", h.NodeIP, res.StatusCode)
+		return run
+	}
+
 	defer res.Body.Close()
-	out, err := os.Create(h.StorageFolder + "kubelet-" + uid + ".pprof")
+	out, err := os.Create(h.StorageFolder + "/kubelet-" + uid + ".pprof")
 	if err != nil {
 		run.EndDate = time.Now()
 		run.Error = fmt.Errorf("error creating file to save result of kubelet profiling for node %s: %w", h.NodeIP, err)

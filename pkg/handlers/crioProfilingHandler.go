@@ -1,29 +1,27 @@
 package handlers
 
 import (
-	"bytes"
 	"fmt"
-	"os/exec"
 	"time"
+
+	"github.com/openshift/node-observability-agent/pkg/connectors"
 )
 
-func (h *Handlers) ProfileCrio(uid string) ProfilingRun {
+func (h *Handlers) ProfileCrio(uid string, cmd connectors.CmdWrapper) ProfilingRun {
 	//curl --unix-socket /var/run/crio/crio.sock http://localhost/debug/pprof/profile > /mnt/prof.out
-	var stderr bytes.Buffer
+
 	run := ProfilingRun{
 		Type:      CRIORun,
 		BeginDate: time.Now(),
 	}
 
-	cmd := exec.Command("curl", "--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", h.StorageFolder+"crio-"+uid+".pprof")
-	cmd.Stderr = &stderr
-	err := cmd.Run()
+	message, err := cmd.CmdExec()
 	run.EndDate = time.Now()
-	errStr := stderr.String()
 	if err != nil {
-		run.Error = fmt.Errorf("error running CRIO profiling :\n%s", errStr)
+		run.Error = fmt.Errorf("error running CRIO profiling :\n%s", message)
 	} else {
 		run.Successful = true
+		hlog.Infof("CRIO profiling successful, %s", message)
 	}
 	return run
 }
