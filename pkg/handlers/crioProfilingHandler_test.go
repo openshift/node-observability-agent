@@ -19,7 +19,7 @@ func TestProfileCrio(t *testing.T) {
 			expected: ProfilingRun{
 				Type:       CRIORun,
 				Successful: true,
-				Error:      nil,
+				Error:      "",
 			},
 		},
 		{
@@ -28,7 +28,7 @@ func TestProfileCrio(t *testing.T) {
 			expected: ProfilingRun{
 				Type:       CRIORun,
 				Successful: false,
-				Error:      fmt.Errorf("error running CRIO profiling :\n%s", "curl: (7) Couldn't connect to server"),
+				Error:      fmt.Sprintf("error running CRIO profiling :\n%s", "curl: (7) Couldn't connect to server"),
 			},
 		},
 		{
@@ -37,7 +37,7 @@ func TestProfileCrio(t *testing.T) {
 			expected: ProfilingRun{
 				Type:       CRIORun,
 				Successful: false,
-				Error:      fmt.Errorf("error running CRIO profiling :\n%s", "curl: (23) Failure writing output to destination"),
+				Error:      fmt.Sprintf("error running CRIO profiling :\n%s", "curl: (23) Failure writing output to destination"),
 			},
 		},
 	}

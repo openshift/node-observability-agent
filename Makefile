@@ -36,7 +36,7 @@ fmt:
 .PHONY: test
 test: vendor fmt #lint
 	@echo "### Testing"
-	go test -mod vendor ./... -coverprofile ${COVERPROFILE} -tags fake
+	go test -mod vendor ./... -timeout 50s -coverprofile ${COVERPROFILE} -tags fake
 
 .PHONY: verify
 verify: test #lint test 

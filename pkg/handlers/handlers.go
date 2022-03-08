@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -34,9 +34,11 @@ type FileType string
 const (
 	KubeletRun RunType  = "Kubelet"
 	CRIORun    RunType  = "CRIO"
+	UnknownRun RunType  = "Unknown"
 	LockFile   FileType = "lock"
 	LogFile    FileType = "log"
 	ErrorFile  FileType = "err"
+	timeout    int      = 35
 )
 
 type ProfilingRun struct {
@@ -44,7 +46,7 @@ type ProfilingRun struct {
 	Successful bool
 	BeginDate  time.Time
 	EndDate    time.Time
-	Error      error
+	Error      string
 }
 
 type Run struct {
@@ -70,11 +72,11 @@ const (
 
 func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	if h.errorFileExists() {
-		uid, err := readUidFromFile(h.StorageFolder + "agent." + string(ErrorFile))
+		uid, err := readUidFromFile(filepath.Join(h.StorageFolder, "agent."+string(ErrorFile)))
 		if err != nil {
-			http.Error(w, "unable to read lock file",
+			http.Error(w, "unable to read error file",
 				http.StatusInternalServerError)
-			hlog.Error("Unable to read lock file")
+			hlog.Error("Unable to read error file")
 			return
 		}
 		err = respondBusyOrError(uid, w, r, true)
@@ -131,27 +133,27 @@ func createAndSendUID(w http.ResponseWriter, r *http.Request) (Run, error) {
 	return response, nil
 }
 
-func writeRunToFile(run Run, storageFolder string, fileType FileType) string {
+func writeRunToFile(run Run, storageFolder string, fileType FileType) (string, error) {
 	var fileName string
 	if fileType == LogFile {
-		fileName = storageFolder + run.ID.String() + "." + string(fileType)
+		fileName = filepath.Join(storageFolder, run.ID.String()+"."+string(fileType))
 	} else {
-		fileName = storageFolder + "agent." + string(fileType)
+		fileName = filepath.Join(storageFolder, "agent."+string(fileType))
 	}
 
 	bytes, err := json.Marshal(run)
 	if err != nil {
-		panic("error while creating " + string(fileType) + " file : unable to marshal run of ID" + run.ID.String() + "\n" + err.Error())
+		return "", fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%v", string(fileType), run.ID.String(), err)
 	}
 	err = os.WriteFile(fileName, bytes, 0644)
 	if err != nil {
-		panic("error creating " + string(fileType) + "file" + err.Error())
+		return "", fmt.Errorf("error writing  %s file: %v", fileName, err)
 	}
-	return fileName
+	return fileName, nil
 }
 
 func (h *Handlers) errorFileExists() bool {
-	fileName := h.StorageFolder + string(os.PathSeparator) + "agent." + string(ErrorFile)
+	fileName := filepath.Join(h.StorageFolder, "agent."+string(ErrorFile))
 	//TODO return and handle errors better
 	if _, err := os.Stat(fileName); err != nil {
 		hlog.Errorf("error getting stats for %s:\n%v", fileName, err)
@@ -213,11 +215,11 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	} else if h.errorFileExists() {
-		uid, err := readUidFromFile(h.StorageFolder + "agent." + string(ErrorFile))
+		uid, err := readUidFromFile(filepath.Join(h.StorageFolder, "agent."+string(ErrorFile)))
 		if err != nil {
-			http.Error(w, "unable to read lock file",
+			http.Error(w, "unable to read error file",
 				http.StatusInternalServerError)
-			hlog.Error("Unable to read lock file")
+			hlog.Error("Unable to read error file")
 			return
 		}
 		err = respondBusyOrError(uid, w, r, true)
@@ -257,7 +259,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		connector := connectors.Connector{}
-		connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", h.StorageFolder + "crio-" + run.ID.String() + ".pprof"})
+		connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", filepath.Join(h.StorageFolder, "crio-"+run.ID.String()+".pprof")})
 		runResultsChan <- h.ProfileCrio(run.ID.String(), &connector)
 	}()
 
@@ -270,24 +272,27 @@ func (h *Handlers) processResults(run Run, runResultsChan chan ProfilingRun) {
 	defer func() {
 		h.mux.Unlock()
 		h.onGoingRunId = ""
+		close(runResultsChan)
 	}()
 	// wait for the results
 	run.ProfilingRuns = []ProfilingRun{}
 	isTimeout := false
-	for nb := 0; nb < 2 || isTimeout; {
+	for nb := 0; nb < 2 && !isTimeout; {
 		select {
 		case pr := <-runResultsChan:
 			nb++
 			run.ProfilingRuns = append(run.ProfilingRuns, pr)
-		case <-time.After(time.Second * 35):
+		case <-time.After(time.Second * time.Duration(timeout)):
 			//timeout! dont wait anymore
-			run.ProfilingRuns = append(run.ProfilingRuns, ProfilingRun{
-				Type:       "",
+			prInTimeout := ProfilingRun{
+				Type:       UnknownRun,
 				Successful: false,
-				BeginDate:  time.Time{},
-				EndDate:    time.Time{},
-				Error:      errors.New("timeout"),
-			})
+				BeginDate:  time.Now(),
+				EndDate:    time.Now(),
+				Error:      fmt.Sprintf("timeout after waiting %ds", timeout),
+			}
+			prInTimeout.Error = fmt.Sprintf("timeout after waiting %ds", timeout)
+			run.ProfilingRuns = append(run.ProfilingRuns, prInTimeout)
 			isTimeout = true
 		}
 	}
@@ -296,9 +301,9 @@ func (h *Handlers) processResults(run Run, runResultsChan chan ProfilingRun) {
 	var errorMessage bytes.Buffer
 	var logMessage bytes.Buffer
 	for _, aRun := range run.ProfilingRuns {
-		if aRun.Error != nil {
+		if aRun.Error != "" {
 			errorMessage.WriteString("errors encountered while running " + string(aRun.Type) + ":\n")
-			errorMessage.WriteString(aRun.Error.Error() + "\n")
+			errorMessage.WriteString(aRun.Error + "\n")
 		}
 		logMessage.WriteString(string(aRun.Type) + " - " + run.ID.String() + ": " + aRun.BeginDate.String() + " -> " + aRun.EndDate.String() + "\n")
 	}
@@ -306,11 +311,17 @@ func (h *Handlers) processResults(run Run, runResultsChan chan ProfilingRun) {
 	// replace the lock file by error file in case of errors
 	if errorMessage.Len() > 0 {
 		hlog.Error(errorMessage.String())
-		writeRunToFile(run, h.StorageFolder, ErrorFile)
+		_, err := writeRunToFile(run, h.StorageFolder, ErrorFile)
+		if err != nil {
+			hlog.Fatal(err)
+		}
 		return
 	}
 
 	// no errors : simply log the results and rename lock to log
 	hlog.Info(logMessage.String())
-	writeRunToFile(run, h.StorageFolder, LogFile)
+	_, err := writeRunToFile(run, h.StorageFolder, LogFile)
+	if err != nil {
+		hlog.Fatal(err)
+	}
 }

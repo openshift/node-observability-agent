@@ -3,20 +3,27 @@ package handlers
 import (
 	"encoding/json"
 	"io/ioutil"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
 
+const (
+	validUID string = "dd37122b-daaf-4d75-9250-c0747e9c5c47"
+)
+
 func TestStatus(t *testing.T) {
 	testCases := []struct {
-		name         string
-		isBusy       bool
-		isError      bool
-		expectedCode int
-		expectedBody string
+		name           string
+		isBusy         bool
+		isError        bool
+		errFileContent string
+		expectedCode   int
+		expectedBody   string
 	}{
 		{
 			name:         "Service is ready, HTTP 200",
@@ -30,14 +37,23 @@ func TestStatus(t *testing.T) {
 			isBusy:       true,
 			isError:      false,
 			expectedCode: 409,
-			expectedBody: "1234 still running",
+			expectedBody: validUID + " still running",
 		},
 		{
-			name:         "Service is in error, HTTP 500",
-			isBusy:       false,
-			isError:      true,
-			expectedCode: 500,
-			expectedBody: "1234 failed",
+			name:           "Service is in error, HTTP 500",
+			isBusy:         false,
+			isError:        true,
+			expectedCode:   500,
+			errFileContent: "{\"ID\":\"" + validUID + "\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}",
+			expectedBody:   validUID + " failed",
+		},
+		{
+			name:           "Service is in error, error file unreadable, HTTP 500",
+			isBusy:         false,
+			isError:        true,
+			expectedCode:   500,
+			errFileContent: "{\"ID" + validUID + "\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}}",
+			expectedBody:   "unable to read error file",
 		},
 	}
 	for _, tc := range testCases {
@@ -46,13 +62,12 @@ func TestStatus(t *testing.T) {
 			w := httptest.NewRecorder()
 			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 			if tc.isBusy {
-				h.onGoingRunId = "1234"
+				h.onGoingRunId = validUID
 			}
 			if tc.isError {
 				// prepare an error file
 				errorFile := "/tmp/agent.err"
-				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
-				err := os.WriteFile(errorFile, []byte(fileContent), 0644)
+				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0644)
 				if err != nil {
 					t.Error(err)
 				}
@@ -166,7 +181,7 @@ func TestReadUidFromFile(t *testing.T) {
 	// prepare an error file
 	normalErrorFile := "/tmp/agent.err"
 	fileContent := Run{
-		ID:            uuid.MustParse("dd37122b-daaf-4d75-9250-c0747e9c5c47"),
+		ID:            uuid.MustParse(validUID),
 		ProfilingRuns: []ProfilingRun{},
 	}
 	jsonFileContent, err := json.Marshal(fileContent)
@@ -179,7 +194,7 @@ func TestReadUidFromFile(t *testing.T) {
 	}
 	defer func() {
 		if os.Remove(normalErrorFile) != nil {
-			t.Error(err)
+			t.Errorf("Unable to delete %s", normalErrorFile)
 		}
 	}()
 
@@ -194,8 +209,8 @@ func TestReadUidFromFile(t *testing.T) {
 		}
 	}()
 	// prepare an error file
-	unmarshallableErrorFile := "/tmp/KOagent.err"
-	unmarshallableContent := "{\"ID dd37122b-daaf-4d75-9250-c0747e9c5c47\",\"ProfilingRuns\":{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
+	unmarshallableErrorFile := "/tmp/invalidJsonAgent.err"
+	unmarshallableContent := "{\"ID " + validUID + "\",\"ProfilingRuns\":{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
 	err = os.WriteFile(unmarshallableErrorFile, []byte(unmarshallableContent), 0644)
 	if err != nil {
 		t.Error(err)
@@ -216,7 +231,7 @@ func TestReadUidFromFile(t *testing.T) {
 			name:          "error file with correct content returns expected uid",
 			errorFile:     normalErrorFile,
 			expectedError: false,
-			expectedId:    "dd37122b-daaf-4d75-9250-c0747e9c5c47",
+			expectedId:    validUID,
 		},
 		{
 			name:          "error file with unmarshallable content returns expected error",
@@ -252,4 +267,280 @@ func TestReadUidFromFile(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleProfiling(t *testing.T) {
+
+	testCases := []struct {
+		name           string
+		serverState    string
+		errFileContent string
+		expectedCode   int
+	}{
+		{
+			name:         "Server is ready creates lock, triggers pprof for crio+kubelet and answers 200",
+			serverState:  "ready",
+			expectedCode: http.StatusOK,
+		},
+		{
+			name:           "Server is in error should send 500 immediately",
+			serverState:    "error",
+			errFileContent: "{\"ID\":\"" + validUID + "\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}",
+			expectedCode:   http.StatusInternalServerError,
+		},
+		{
+			name:           "Server is in error, error file unreadable should send 500 immediately",
+			serverState:    "error",
+			errFileContent: "{\"ID" + validUID + "\",\"ProfilingRuns\":{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}",
+			expectedCode:   http.StatusInternalServerError,
+		},
+		{
+			name:         "Server is busy should send 409 immediately",
+			serverState:  "busy",
+			expectedCode: http.StatusConflict,
+		},
+	}
+	for _, tc := range testCases {
+
+		t.Run(tc.name, func(t *testing.T) {
+			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+			r := httptest.NewRequest("GET", "http://localhost/status", nil)
+			w := httptest.NewRecorder()
+			if tc.serverState == "busy" {
+				h.mux.Lock()
+				h.
+					onGoingRunId = validUID
+			}
+			if tc.serverState == "error" {
+				// prepare an error file
+				errorFile := "/tmp/agent.err"
+				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0644)
+				if err != nil {
+					t.Error(err)
+				}
+				defer func() {
+					if os.Remove(errorFile) != nil {
+						t.Log("unable to remove file, already removed")
+					}
+				}()
+			}
+			h.HandleProfiling(w, r)
+			resp := w.Result()
+
+			if resp.StatusCode != tc.expectedCode {
+				t.Errorf("Expected status code %d but was %d", tc.expectedCode, resp.StatusCode)
+			}
+			if tc.serverState == "ready" {
+				if h.onGoingRunId == "" {
+					t.Error("expected lock to be created and ongoingRunId not to be empty")
+				}
+			} else if tc.serverState == "busy" {
+				if h.onGoingRunId != validUID {
+					t.Errorf("Expected lock to be locked, with ongoingRunId = %s, but was empty", h.onGoingRunId)
+
+				}
+			} else if tc.serverState == "error" {
+				if h.onGoingRunId != "" {
+					t.Errorf("Expected lock to be unlocked, but had ongoingRunId = %s", h.onGoingRunId)
+
+				}
+			}
+		})
+	}
+}
+
+func TestProcessResults(t *testing.T) {
+	h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+
+	crioRunOK := ProfilingRun{
+		Type:       CRIORun,
+		Successful: true,
+		BeginDate:  time.Now(),
+		EndDate:    time.Now(),
+		Error:      "",
+	}
+	crioRunKO := ProfilingRun{
+		Type:       CRIORun,
+		Successful: false,
+		BeginDate:  time.Now(),
+		EndDate:    time.Now(),
+		Error:      "fake error",
+	}
+	kubeletRunOK := ProfilingRun{
+		Type:       KubeletRun,
+		Successful: true,
+		BeginDate:  time.Now(),
+		EndDate:    time.Now(),
+		Error:      "",
+	}
+	kubeletRunKO := ProfilingRun{
+		Type:       KubeletRun,
+		Successful: false,
+		BeginDate:  time.Now(),
+		EndDate:    time.Now(),
+		Error:      "fake error",
+	}
+	chanAllOK := make(chan ProfilingRun, 2)
+	chanAllOK <- kubeletRunOK
+	chanAllOK <- crioRunOK
+
+	chanCrioKO := make(chan ProfilingRun, 2)
+	chanCrioKO <- kubeletRunOK
+	chanCrioKO <- crioRunKO
+
+	chanKubeletKO := make(chan ProfilingRun, 2)
+	chanKubeletKO <- kubeletRunKO
+	chanKubeletKO <- crioRunOK
+
+	chanOnlyCrio := make(chan ProfilingRun, 1)
+	chanOnlyCrio <- crioRunOK
+
+	testCases := []struct {
+		name                   string
+		channel                chan ProfilingRun
+		expectedLock           bool
+		expectedError          bool
+		expectedTimeout        bool
+		expectedCrioSuccess    bool
+		expectedKubeletSuccess bool
+		expectedRunID          string
+	}{
+		{
+			name:                   "channel with both results OK releases the lock",
+			channel:                chanAllOK,
+			expectedLock:           false,
+			expectedError:          false,
+			expectedTimeout:        false,
+			expectedCrioSuccess:    true,
+			expectedKubeletSuccess: true,
+			expectedRunID:          validUID,
+		},
+		{
+			name:                   "channel with crio result KO releases the lock and creates error file",
+			channel:                chanCrioKO,
+			expectedLock:           false,
+			expectedError:          true,
+			expectedTimeout:        false,
+			expectedCrioSuccess:    false,
+			expectedKubeletSuccess: true,
+			expectedRunID:          validUID,
+		},
+		{
+			name:                   "channel with kubelet result KO releases the lock and creates error file",
+			channel:                chanKubeletKO,
+			expectedLock:           false,
+			expectedError:          true,
+			expectedTimeout:        false,
+			expectedCrioSuccess:    true,
+			expectedKubeletSuccess: false,
+			expectedRunID:          validUID,
+		},
+		{
+			name:                   "channel with only crio result should be unstuck after 40s with error file",
+			channel:                chanOnlyCrio,
+			expectedLock:           false,
+			expectedError:          true,
+			expectedTimeout:        true,
+			expectedCrioSuccess:    true,
+			expectedKubeletSuccess: false,
+			expectedRunID:          validUID,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			run := Run{
+				ID:            uuid.MustParse(validUID),
+				ProfilingRuns: []ProfilingRun{},
+			}
+			h.mux.Lock()
+			h.onGoingRunId = validUID
+			defer cleanup(t)
+			h.processResults(run, tc.channel)
+			if h.onGoingRunId != "" && !tc.expectedLock {
+				t.Errorf("Shouldnt be locked but was locked by " + h.onGoingRunId)
+			}
+			if h.onGoingRunId == "" && tc.expectedLock {
+				t.Errorf("Should be locked but wasnt")
+			}
+			if !tc.expectedError {
+				_, err := os.Stat("/tmp/" + validUID + ".log")
+				if err != nil {
+					t.Errorf("Expected log file /tmp/%s.log but file wasnt there", validUID)
+				}
+				theRun, err := readRunFromFile("/tmp/" + validUID + ".log")
+				if err != nil {
+					t.Errorf("error reading file /tmp/%s.log: %v", validUID, err)
+				}
+				if theRun.ID.String() != tc.expectedRunID {
+					t.Errorf("Expected log file /tmp/%s.log to contain run ID %s but was %s", validUID, theRun.ID.String(), tc.expectedRunID)
+				}
+				for _, aProfilingRun := range theRun.ProfilingRuns {
+					if aProfilingRun.Type == CRIORun {
+						if aProfilingRun.Successful != tc.expectedCrioSuccess {
+							t.Errorf("Expected log file /tmp/%s.log to contain crio run success = %t, but was %t", validUID, tc.expectedCrioSuccess, aProfilingRun.Successful)
+						}
+					}
+					if aProfilingRun.Type == KubeletRun {
+						if aProfilingRun.Successful != tc.expectedKubeletSuccess {
+							t.Errorf("Expected log file /tmp/%s.log to contain kubelet run success = %t, but was %t", validUID, tc.expectedKubeletSuccess, aProfilingRun.Successful)
+						}
+					}
+				}
+			} else {
+				_, err := os.Stat("/tmp/agent.err")
+				if err != nil {
+					t.Errorf("Expected error file /tmp/agent.err but file wasnt there")
+				}
+				theRun, err := readRunFromFile("/tmp/agent.err")
+				if err == nil {
+					if theRun.ID.String() != tc.expectedRunID {
+						t.Errorf("Expected log file /tmp/agent.err to contain run ID %s but was %s", theRun.ID.String(), tc.expectedRunID)
+					}
+					for _, aProfilingRun := range theRun.ProfilingRuns {
+						if aProfilingRun.Type == CRIORun {
+							if aProfilingRun.Successful != tc.expectedCrioSuccess {
+								t.Errorf("Expected log file /tmp/agent.err to contain crio run success = %t, but was %t", tc.expectedCrioSuccess, aProfilingRun.Successful)
+							}
+						}
+						if aProfilingRun.Type == KubeletRun {
+							if aProfilingRun.Successful != tc.expectedKubeletSuccess {
+								t.Errorf("Expected log file /tmp/agent.err to contain kubelet run success = %t, but was %t", tc.expectedKubeletSuccess, aProfilingRun.Successful)
+							}
+						}
+						if aProfilingRun.Type == UnknownRun && !tc.expectedTimeout {
+							t.Error("timeout when none was expected")
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func cleanup(t *testing.T) {
+	_, err := os.Stat("/tmp/agent.err")
+	if err == nil {
+		if err := os.Remove("/tmp/agent.err"); err != nil {
+			t.Error(err)
+		}
+	}
+	_, err = os.Stat("/tmp/" + validUID + ".log")
+	if err == nil {
+		if err := os.Remove("/tmp/" + validUID + ".log"); err != nil {
+			t.Error(err)
+		}
+	}
+}
+
+func readRunFromFile(fileName string) (Run, error) {
+	var run *Run = &Run{}
+	contents, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return *run, err
+	}
+	err = json.Unmarshal(contents, run)
+	if err != nil {
+		return *run, err
+	}
+	return *run, nil
 }
