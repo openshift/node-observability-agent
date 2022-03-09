@@ -18,7 +18,7 @@ func (h *Handlers) ProfileCrio(uid string, cmd connectors.CmdWrapper) ProfilingR
 	message, err := cmd.CmdExec()
 	run.EndDate = time.Now()
 	if err != nil {
-		run.Error = fmt.Errorf("error running CRIO profiling :\n%s", message)
+		run.Error = fmt.Sprintf("error running CRIO profiling :\n%s", message)
 	} else {
 		run.Successful = true
 		hlog.Infof("CRIO profiling successful, %s", message)

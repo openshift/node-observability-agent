@@ -47,7 +47,7 @@ func TestProfileKubelet(t *testing.T) {
 			expected: ProfilingRun{
 				Type:       KubeletRun,
 				Successful: true,
-				Error:      nil,
+				Error:      "",
 			},
 		},
 		{
@@ -66,7 +66,7 @@ func TestProfileKubelet(t *testing.T) {
 			expected: ProfilingRun{
 				Type:       KubeletRun,
 				Successful: false,
-				Error:      fmt.Errorf("error with HTTP request for kubelet profiling https://%s:10250/debug/pprof/profile: statusCode %d", "127.0.0.1", http.StatusUnauthorized),
+				Error:      fmt.Sprintf("error with HTTP request for kubelet profiling https://%s:10250/debug/pprof/profile: statusCode %d", "127.0.0.1", http.StatusUnauthorized),
 			},
 		},
 		{
@@ -85,7 +85,7 @@ func TestProfileKubelet(t *testing.T) {
 			expected: ProfilingRun{
 				Type:       KubeletRun,
 				Successful: false,
-				Error:      fmt.Errorf("error creating file to save result of kubelet profiling for node %s", "127.0.0.1"),
+				Error:      fmt.Sprintf("error creating file to save result of kubelet profiling for node %s", "127.0.0.1"),
 			},
 		},
 	}
@@ -102,8 +102,8 @@ func TestProfileKubelet(t *testing.T) {
 				t.Errorf("Expecting ProfilingRun to be successful=%t but was %t", tc.expected.Successful, pr.Successful)
 			}
 			if !tc.expected.Successful && !pr.Successful {
-				if !strings.Contains(pr.Error.Error(), tc.expected.Error.Error()) {
-					t.Errorf("Error message differs from expected:\nExpected:%s\nGot:%s", tc.expected.Error.Error(), pr.Error.Error())
+				if !strings.Contains(pr.Error, tc.expected.Error) {
+					t.Errorf("Error message differs from expected:\nExpected:%s\nGot:%s", tc.expected.Error, pr.Error)
 				}
 			}
 		})
