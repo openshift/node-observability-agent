@@ -8,8 +8,13 @@ spec:
   template:
     spec:
       containers:
-      - image: quay.io/skhoury/node-observability-agent:go-latest
+      - image: node-observability-agent:latest
         imagePullPolicy: Always
+        command:
+        - node-observability-agent
+        args:
+        - "--tokenFile=/var/run/secrets/kubernetes.io/serviceaccount/token"
+        - "--storage=/run"
         name: node-observability-agent
         resources: {}
         terminationMessagePath: /dev/termination-log

@@ -1,5 +1,5 @@
 # Adds namespace to all resources.
-namespace: node-observability
+namespace: node-observability-operator
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
@@ -19,7 +19,6 @@ configurations:
 resources:
 - daemonset.yaml
 - machine_config.yaml
-- pvc.yaml
 - rbac.yaml
 - sa.yaml
 - scc.yaml
@@ -28,7 +27,6 @@ resources:
 
 patchesStrategicMerge:
 - daemonset_patch.yaml
-- pvc_patch.yaml
 
 vars:
 - name: SERVICE_ACCOUNT_NAME

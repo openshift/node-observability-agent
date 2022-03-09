@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: node-observability-agent
 spec:
-  type: NodePort
+  clusterIP: None
   ports:
       # By default and for convenience, the `targetPort` is set to the same value as the `port` field.
     - protocol: TCP

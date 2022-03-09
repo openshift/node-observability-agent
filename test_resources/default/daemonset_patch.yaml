@@ -9,11 +9,14 @@ spec:
       - name: node-observability-agent
         securityContext:
           privileged: true 
-        volumeMounts:
-        - name: profiling-data
-          mountPath: /host/tmp/pprofs
-          readOnly: false
-      volumes:
-      - name: profiling-data
-        persistentVolumeClaim:
-          claimName: node-observability-agent-profiling
+      #   volumeMounts:
+      #   - name: profiling-data
+      #     mountPath: /host/tmp/pprofs
+      #     readOnly: false
+      # volumes:
+      # - name: profiling-data
+      #   persistentVolumeClaim:
+      #     claimName: node-observability-agent-profiling
+      # - name: profiling-data
+      #   hostPath:
+      #     path: /tmp/data
