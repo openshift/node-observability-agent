@@ -17,8 +17,8 @@ func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req), nil
 }
 
-//NewTestClient returns *http.Client with Transport replaced to avoid making real calls
-func NewHttpTestClient(fn RoundTripFunc) *http.Client {
+//NewHTTPTestClient returns *http.Client with Transport replaced to avoid making real calls
+func NewHTTPTestClient(fn RoundTripFunc) *http.Client {
 	return &http.Client{
 		Transport: RoundTripFunc(fn),
 	}
@@ -29,12 +29,12 @@ func TestProfileKubelet(t *testing.T) {
 		name     string
 		handlers *Handlers
 		client   *http.Client
-		expected ProfilingRun
+		expected profilingRun
 	}{
 		{
 			name:     "KubeletProfiling passes, ProfileRun returned",
 			handlers: NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1"),
-			client: NewHttpTestClient(func(req *http.Request) *http.Response {
+			client: NewHTTPTestClient(func(req *http.Request) *http.Response {
 				return &http.Response{
 					StatusCode: 200,
 					// Send response to be tested
@@ -44,8 +44,8 @@ func TestProfileKubelet(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			expected: ProfilingRun{
-				Type:       KubeletRun,
+			expected: profilingRun{
+				Type:       kubeletRun,
 				Successful: true,
 				Error:      "",
 			},
@@ -55,7 +55,7 @@ func TestProfileKubelet(t *testing.T) {
 			handlers: NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1"),
 
 			//client wouldnt be used in this case
-			client: NewHttpTestClient(func(req *http.Request) *http.Response {
+			client: NewHTTPTestClient(func(req *http.Request) *http.Response {
 				return &http.Response{
 					StatusCode: http.StatusUnauthorized,
 
@@ -63,8 +63,8 @@ func TestProfileKubelet(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			expected: ProfilingRun{
-				Type:       KubeletRun,
+			expected: profilingRun{
+				Type:       kubeletRun,
 				Successful: false,
 				Error:      fmt.Sprintf("error with HTTP request for kubelet profiling https://%s:10250/debug/pprof/profile: statusCode %d", "127.0.0.1", http.StatusUnauthorized),
 			},
@@ -72,7 +72,7 @@ func TestProfileKubelet(t *testing.T) {
 		{
 			name:     "KubeletProfiling fails to save, ProfileRun in error",
 			handlers: NewHandlers("abc", "C:\\", "/tmp/fakeSocket", "127.0.0.1"),
-			client: NewHttpTestClient(func(req *http.Request) *http.Response {
+			client: NewHTTPTestClient(func(req *http.Request) *http.Response {
 				return &http.Response{
 					StatusCode: 200,
 					// Send response to be tested
@@ -82,8 +82,8 @@ func TestProfileKubelet(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			expected: ProfilingRun{
-				Type:       KubeletRun,
+			expected: profilingRun{
+				Type:       kubeletRun,
 				Successful: false,
 				Error:      fmt.Sprintf("error creating file to save result of kubelet profiling for node %s", "127.0.0.1"),
 			},
@@ -91,7 +91,7 @@ func TestProfileKubelet(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			pr := tc.handlers.ProfileKubelet("1234", tc.client)
+			pr := tc.handlers.profileKubelet("1234", tc.client)
 			if tc.expected.Type != pr.Type {
 				t.Errorf("Expecting a ProfilingRun of type %s but was %s", tc.expected.Type, pr.Type)
 			}

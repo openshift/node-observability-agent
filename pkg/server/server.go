@@ -11,6 +11,7 @@ import (
 
 var slog = logrus.WithField("module", "server")
 
+// Config holds the parameters necessary for the HTTP server, and agent in general need to run
 type Config struct {
 	Port           int
 	Token          string
@@ -19,6 +20,7 @@ type Config struct {
 	CrioUnixSocket string
 }
 
+// Start starts HTTP server with parameters in cfg structure
 func Start(cfg Config) {
 
 	router := setupRoutes(cfg)

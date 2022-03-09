@@ -7,11 +7,14 @@ import (
 	"github.com/openshift/node-observability-agent/pkg/connectors"
 )
 
-func (h *Handlers) ProfileCrio(uid string, cmd connectors.CmdWrapper) ProfilingRun {
+// ProfileCrio calls /debug/pprof/profile on the h.NodeIP, through the unix socket,
+// thus triggering a CRIO profiling on that node.
+// This call requires access to the host socket, which is passed to the agent in parameter crioSocket
+func (h *Handlers) profileCrio(uid string, cmd connectors.CmdWrapper) profilingRun {
 	//curl --unix-socket /var/run/crio/crio.sock http://localhost/debug/pprof/profile > /mnt/prof.out
 
-	run := ProfilingRun{
-		Type:      CRIORun,
+	run := profilingRun{
+		Type:      crioRun,
 		BeginDate: time.Now(),
 	}
 
