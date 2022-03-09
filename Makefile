@@ -16,15 +16,25 @@ include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
 )
 
 # Image URL to use all building/pushing image targets
-IMG ?= node-observability-agent:go-latest
-TARGET_REPO ?= registry.ci.openshift.org/ocp
-IMAGE_TAG ?= v0.0.1
+IMG ?= node-observability-agent
+IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 
 .PHONY: build.image
 build.image: build.go verify
-	$(CONTAINER_ENGINE) build -t ${IMG} .
+	$(CONTAINER_ENGINE) build -t ${IMG}:${IMAGE_TAG} .
+
+.PHONY: push.image.rhel8
+build.image.rhel8:
+	$(CONTAINER_ENGINE) build -t ${IMG}:${IMAGE_TAG} -f Dockerfile.rhel8 .
 
 .PHONY: push.image
 push.image: build.image
-	$(CONTAINER_ENGINE) tag ${IMG} $(TARGET_REPO)/${IMG}:$(IMAGE_TAG)
-	$(CONTAINER_ENGINE) push ${TARGET_REPO}/${IMG}:$(IMAGE_TAG)
+	$(CONTAINER_ENGINE) push ${IMG}:$(IMAGE_TAG)
+
+.PHONY: push.image.rhel8
+push.image.rhel8: build.image.rhel8
+	$(CONTAINER_ENGINE) push ${IMG}:${IMAGE_TAG}
+
+deploy: push.image.rhel8
+	oc new-project node-observability-operator
+	IMG=$(IMG) hack/kustomize-build.sh | oc apply -f -

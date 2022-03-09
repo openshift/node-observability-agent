@@ -15,8 +15,8 @@ import (
 var (
 	version       = "unknown"
 	app           = "node-observability-agent"
+	node          = os.Getenv("NODE_IP")
 	port          = flag.Int("port", 9000, "server port to listen on (default: 9000)")
-	node          = flag.String("node", "127.0.0.1", "IP address of the node on which to perform the profiling")
 	storageFolder = flag.String("storage", "/tmp/pprofs/", "folder to which the pprof files are saved")
 	tokenFile     = flag.String("tokenFile", "", "file containing token to be used for kubelet profiling http request")
 	crioSocket    = flag.String("crioUnixSocket", "/var/run/crio/crio.sock", "file referring to the unix socket to be used for CRIO profiling")
@@ -42,7 +42,7 @@ func main() {
 	log.SetLevel(lvl)
 	log.Infof("Starting %s at log level %s", appVersion, *logLevel)
 
-	checkParameters(*tokenFile, *node, *storageFolder, *crioSocket)
+	checkParameters(*tokenFile, node, *storageFolder, *crioSocket)
 
 	token, err := readTokenFile(*tokenFile)
 	if err != nil {
@@ -54,7 +54,7 @@ func main() {
 		Token:          token,
 		StorageFolder:  *storageFolder,
 		CrioUnixSocket: *crioSocket,
-		NodeIP:         *node,
+		NodeIP:         node,
 	})
 }
 

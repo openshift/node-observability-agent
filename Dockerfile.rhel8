@@ -1,0 +1,14 @@
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.17-openshift-4.10 AS builder
+
+WORKDIR /go/src/github.com/openshift/node-observability-agent
+COPY . .
+
+RUN make build
+
+FROM registry.ci.openshift.org/ocp/4.10:base
+
+LABEL io.k8s.display-name="OpenShift NodeObservabilityAgent" \
+      io.k8s.description="Collects node profiling data" \
+      io.openshift.tags="openshift,nodeobservability,nodeobservabilityagent"
+
+COPY --from=builder /go/src/github.com/openshift/node-observability-agent/bin/node-observability-agent /usr/bin/

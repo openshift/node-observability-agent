@@ -24,8 +24,7 @@ In case of error, `/status` and `/pprof` will return a 500 error. The agent will
 The agent can be run locally but is best run in a pod on a Kubernetes cluster.
 
 ```bash
-$ kubectl create namespace node-observability
-$ kubectl kustomize test_resources/default/ | kubectl apply -f -
+$ IMG=quay.io/user-xyz/node-observability-agent make deploy
 $ kubectl port-forward svc/node-observability-agent 9000:80
 ```
 
@@ -33,6 +32,6 @@ $ kubectl port-forward svc/node-observability-agent 9000:80
 To run locally:
 
 ```bash
-./node-observability-agent --tokenFile /var/run/secrets/kubernetes.io/serviceaccount/token --storage /host/tmp/pprofs/ --node $NODE_IP
+NODE_IP=$NODE_IP./bin/node-observability-agent --tokenFile /var/run/secrets/kubernetes.io/serviceaccount/token --storage /host/tmp/pprofs/
 ```
 
