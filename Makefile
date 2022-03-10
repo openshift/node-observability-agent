@@ -3,7 +3,7 @@ GO_BUILD_BINDIR := bin
 GO_TEST_FLAGS :=-timeout=50s -tags=fake
 GO_PACKAGES=./pkg/... ./cmd/... ./tools/...
 
-GOLANGCI_LINT_BIN=$(GO_BUILD_BINDIR)/golangci-lint
+GOLANGCI_LINT_BIN=$(shell pwd)/bin/golangci-lint
 
 ifeq (,$(shell which podman 2>/dev/null))
 CONTAINER_ENGINE ?= docker
@@ -28,7 +28,7 @@ lint: $(GOLANGCI_LINT_BIN)
 	$(GOLANGCI_LINT_BIN) run -c .golangci.yaml --deadline=30m
 
 $(GOLANGCI_LINT_BIN):
-	mkdir -p $(GO_BUILD_BINDIR)
+	mkdir -p $(shell pwd)/bin
 	hack/golangci-lint.sh $(GOLANGCI_LINT_BIN)
 	
 .PHONY: build.image
