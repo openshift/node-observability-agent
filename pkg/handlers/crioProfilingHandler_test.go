@@ -11,31 +11,31 @@ func TestProfileCrio(t *testing.T) {
 	testCases := []struct {
 		name      string
 		connector connectors.CmdWrapper
-		expected  ProfilingRun
+		expected  profilingRun
 	}{
 		{
 			name:      "Curl command successful, OK",
-			connector: &connectors.MockConnector{Flag: connectors.NO_ERROR},
-			expected: ProfilingRun{
-				Type:       CRIORun,
+			connector: &connectors.FakeConnector{Flag: connectors.NoError},
+			expected: profilingRun{
+				Type:       crioRun,
 				Successful: true,
 				Error:      "",
 			},
 		},
 		{
 			name:      "Network error on curl, ProfilingRun contains error",
-			connector: &connectors.MockConnector{Flag: connectors.SOCKET_ERR},
-			expected: ProfilingRun{
-				Type:       CRIORun,
+			connector: &connectors.FakeConnector{Flag: connectors.SocketErr},
+			expected: profilingRun{
+				Type:       crioRun,
 				Successful: false,
 				Error:      fmt.Sprintf("error running CRIO profiling :\n%s", "curl: (7) Couldn't connect to server"),
 			},
 		},
 		{
 			name:      "IO error at storing result, ProfilingRun contains error",
-			connector: &connectors.MockConnector{Flag: connectors.WRITE_ERR},
-			expected: ProfilingRun{
-				Type:       CRIORun,
+			connector: &connectors.FakeConnector{Flag: connectors.WriteErr},
+			expected: profilingRun{
+				Type:       crioRun,
 				Successful: false,
 				Error:      fmt.Sprintf("error running CRIO profiling :\n%s", "curl: (23) Failure writing output to destination"),
 			},
@@ -46,7 +46,7 @@ func TestProfileCrio(t *testing.T) {
 			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 			tc.connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", h.StorageFolder + "crio-1234.pprof"})
 
-			pr := h.ProfileCrio("1234", tc.connector)
+			pr := h.profileCrio("1234", tc.connector)
 			if tc.expected.Type != pr.Type {
 				t.Errorf("Expecting a ProfilingRun of type %s but was %s", tc.expected.Type, pr.Type)
 			}

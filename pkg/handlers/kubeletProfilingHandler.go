@@ -9,9 +9,12 @@ import (
 	"time"
 )
 
-func (h *Handlers) ProfileKubelet(uid string, client *http.Client) ProfilingRun {
-	run := ProfilingRun{
-		Type:      KubeletRun,
+// ProfileKubelet calls /debug/pprof/profile on the h.NodeIP, thus triggering a kubelet
+// profiling on that node.
+// This call requires an Authorization header, to which the h.Token is passed as Bearer token
+func (h *Handlers) profileKubelet(uid string, client *http.Client) profilingRun {
+	run := profilingRun{
+		Type:      kubeletRun,
 		BeginDate: time.Now(),
 	}
 
