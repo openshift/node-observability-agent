@@ -8,8 +8,9 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/openshift/node-observability-agent/pkg/server"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/openshift/node-observability-agent/pkg/server"
 )
 
 var (

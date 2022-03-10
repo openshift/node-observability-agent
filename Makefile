@@ -3,6 +3,8 @@ GO_BUILD_BINDIR := bin
 GO_TEST_FLAGS :=-timeout=50s -tags=fake
 GO_PACKAGES=./pkg/... ./cmd/... ./tools/...
 
+GOLANGCI_LINT_BIN=$(GO_BUILD_BINDIR)/golangci-lint
+
 ifeq (,$(shell which podman 2>/dev/null))
 CONTAINER_ENGINE ?= docker
 else
@@ -20,6 +22,15 @@ IMG ?= node-observability-agent:go-latest
 TARGET_REPO ?= registry.ci.openshift.org/ocp
 IMAGE_TAG ?= v0.0.1
 
+.PHONY: lint
+## Checks the code with golangci-lint
+lint: $(GOLANGCI_LINT_BIN)
+	$(GOLANGCI_LINT_BIN) run -c .golangci.yaml --deadline=30m
+
+$(GOLANGCI_LINT_BIN):
+	mkdir -p $(GO_BUILD_BINDIR)
+	hack/golangci-lint.sh $(GOLANGCI_LINT_BIN)
+	
 .PHONY: build.image
 build.image: build.go verify
 	$(CONTAINER_ENGINE) build -t ${IMG} .

@@ -13,8 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/openshift/node-observability-agent/pkg/connectors"
 	"github.com/sirupsen/logrus"
+
+	"github.com/openshift/node-observability-agent/pkg/connectors"
 )
 
 var hlog = logrus.WithField("module", "handler")

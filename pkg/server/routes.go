@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/gorilla/mux"
+
 	"github.com/openshift/node-observability-agent/pkg/handlers"
 )
 
