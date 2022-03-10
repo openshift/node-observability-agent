@@ -37,7 +37,6 @@ const (
 	kubeletRun runType  = "Kubelet"
 	crioRun    runType  = "CRIO"
 	unknownRun runType  = "Unknown"
-	lockFile   fileType = "lock"
 	logFile    fileType = "log"
 	errorFile  fileType = "err"
 	timeout    int      = 35
