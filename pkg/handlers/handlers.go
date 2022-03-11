@@ -26,7 +26,7 @@ type Handlers struct {
 	NodeIP         string
 	StorageFolder  string
 	CrioUnixSocket string
-	mux            *sync.RWMutex
+	mux            *sync.Mutex
 	onGoingRunID   string
 }
 
@@ -63,7 +63,7 @@ func NewHandlers(token string, storageFolder string, crioUnixSocket string, node
 		NodeIP:         nodeIP,
 		StorageFolder:  storageFolder,
 		CrioUnixSocket: crioUnixSocket,
-		mux:            &sync.RWMutex{},
+		mux:            &sync.Mutex{},
 		onGoingRunID:   "",
 	}
 }
@@ -78,30 +78,14 @@ const (
 // * HTTP 409 if a previous profiling is still ongoing,
 // * HTTP 200 if the agent is ready
 func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
-	if h.errorFileExists() {
-		uid, err := readUIDFromFile(filepath.Join(h.StorageFolder, "agent."+string(errorFile)))
-		if err != nil {
-			http.Error(w, "unable to read error file",
-				http.StatusInternalServerError)
-			hlog.Error("Unable to read error file")
-			return
-		}
-		err = respondBusyOrError(uid, w, r, true)
-		if err != nil {
-			http.Error(w, "unable to send response",
-				http.StatusInternalServerError)
-			hlog.Error("unable to send response")
-			return
-		}
-		return
-	}
-	if h.onGoingRunID == "" {
+	id := h.getOnGoingRunID()
+	if id == "" {
 		_, err := w.Write([]byte(ready))
 		if err != nil {
 			hlog.Errorf("could not send response busy : %v", err)
 		}
 	} else {
-		err := respondBusyOrError(h.onGoingRunID, w, r, false)
+		err := respondBusyOrError(id, w, r, false)
 		if err != nil {
 			http.Error(w, "unable to send response",
 				http.StatusInternalServerError)
@@ -111,11 +95,32 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func createAndSendUID(w http.ResponseWriter, r *http.Request) (run, error) {
+func (h *Handlers) tryToGenerateUID() (uuid.UUID, bool) {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+	if h.onGoingRunID != "" {
+		return uuid.Nil, false
+	}
+	uid := uuid.New()
+	h.onGoingRunID = uid.String()
+	return uid, true
+}
 
-	id := uuid.New()
+func (h *Handlers) getOnGoingRunID() string {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+	return h.onGoingRunID
+}
+
+func (h *Handlers) runFinished() {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+	h.onGoingRunID = ""
+}
+
+func sendUID(w http.ResponseWriter, r *http.Request, runID uuid.UUID) (run, error) {
 	response := run{
-		ID: id,
+		ID: runID,
 	}
 
 	flusher, ok := w.(http.Flusher)
@@ -213,28 +218,9 @@ func respondBusyOrError(uid string, w http.ResponseWriter, r *http.Request, isEr
 // it triggers the kubelet and CRIO profiling in separate goroutines, and launches a separate
 // function to process the results in a goroutine as well
 func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
-
-	if h.onGoingRunID != "" {
-		uid := h.onGoingRunID
-
-		err := respondBusyOrError(uid, w, r, false)
-		if err != nil {
-			http.Error(w, "unable to send response",
-				http.StatusInternalServerError)
-			hlog.Error("unable to send response")
-			return
-		}
-		return
-	} else if h.errorFileExists() {
-		uid, err := readUIDFromFile(filepath.Join(h.StorageFolder, "agent."+string(errorFile)))
-		if err != nil {
-			http.Error(w, "unable to read error file",
-				http.StatusInternalServerError)
-			hlog.Error("Unable to read error file")
-			return
-		}
-		err = respondBusyOrError(uid, w, r, true)
-		if err != nil {
+	uid, generated := h.tryToGenerateUID()
+	if !generated { // there is an ongoing run, no UID was given
+		if err := respondBusyOrError(uid.String(), w, r, true); err != nil {
 			http.Error(w, "unable to send response",
 				http.StatusInternalServerError)
 			hlog.Error("unable to send response")
@@ -244,15 +230,11 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send a HTTP 200 straight away
-	run, err := createAndSendUID(w, r)
+	run, err := sendUID(w, r, uid)
 	if err != nil {
 		hlog.Error(err)
 		return
 	}
-
-	// Create a lock file with a begin date and a uid
-	h.mux.Lock()
-	h.onGoingRunID = run.ID.String()
 
 	// Channel for collecting results of profiling
 	runResultsChan := make(chan profilingRun)
@@ -274,15 +256,12 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		runResultsChan <- h.profileCrio(run.ID.String(), &connector)
 	}()
 
-	go func() {
-		h.processResults(run, runResultsChan)
-	}()
+	go h.processResults(run, runResultsChan)
 }
 func (h *Handlers) processResults(arun run, runResultsChan chan profilingRun) {
 	// unlock as soon as finished processing
 	defer func() {
-		h.mux.Unlock()
-		h.onGoingRunID = ""
+		h.runFinished()
 		close(runResultsChan)
 	}()
 	// wait for the results
