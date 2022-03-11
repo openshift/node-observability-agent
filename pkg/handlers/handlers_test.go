@@ -62,7 +62,7 @@ func TestStatus(t *testing.T) {
 			w := httptest.NewRecorder()
 			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 			if tc.isBusy {
-				h.onGoingRunID = validUID
+				h.mux.Lock()
 			}
 			if tc.isError {
 				// prepare an error file
@@ -177,98 +177,6 @@ func TestErrorFileExists(t *testing.T) {
 	}
 }
 
-func TestReadUidFromFile(t *testing.T) {
-	// prepare an error file
-	normalErrorFile := "/tmp/agent.err"
-	fileContent := run{
-		ID:            uuid.MustParse(validUID),
-		ProfilingRuns: []profilingRun{},
-	}
-	jsonFileContent, err := json.Marshal(fileContent)
-	if err != nil {
-		t.Error(err)
-	}
-	err = os.WriteFile(normalErrorFile, jsonFileContent, 0644)
-	if err != nil {
-		t.Error(err)
-	}
-	defer func() {
-		if os.Remove(normalErrorFile) != nil {
-			t.Errorf("Unable to delete %s", normalErrorFile)
-		}
-	}()
-
-	unreadableErrorFile := "/tmp/noReadAgent.err"
-	err = os.WriteFile(unreadableErrorFile, []byte(jsonFileContent), 0333)
-	if err != nil {
-		t.Error(err)
-	}
-	defer func() {
-		if os.Remove(unreadableErrorFile) != nil {
-			t.Error(err)
-		}
-	}()
-	// prepare an error file
-	unmarshallableErrorFile := "/tmp/invalidJsonAgent.err"
-	unmarshallableContent := "{\"ID " + validUID + "\",\"ProfilingRuns\":{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
-	err = os.WriteFile(unmarshallableErrorFile, []byte(unmarshallableContent), 0644)
-	if err != nil {
-		t.Error(err)
-	}
-	defer func() {
-		if os.Remove(unmarshallableErrorFile) != nil {
-			t.Error(err)
-		}
-	}()
-
-	testCases := []struct {
-		name          string
-		errorFile     string
-		expectedError bool
-		expectedID    string
-	}{
-		{
-			name:          "error file with correct content returns expected uid",
-			errorFile:     normalErrorFile,
-			expectedError: false,
-			expectedID:    validUID,
-		},
-		{
-			name:          "error file with unmarshallable content returns expected error",
-			errorFile:     unmarshallableErrorFile,
-			expectedError: true,
-			expectedID:    "",
-		},
-		{
-			name:          "error file with no read permission returns expected error",
-			errorFile:     unreadableErrorFile,
-			expectedError: true,
-			expectedID:    "",
-		},
-		{
-			name:          "error file doesnt exist returns expected uid",
-			errorFile:     "/tmp/doesntexist.err",
-			expectedError: true,
-			expectedID:    "",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			id, err := readUIDFromFile(tc.errorFile)
-			if tc.expectedID != id {
-				t.Errorf("expected ID %s but was %s", tc.expectedID, id)
-			}
-			if err != nil && !tc.expectedError {
-				t.Errorf("Error was not expected: %v", err)
-			}
-			if err == nil && tc.expectedError {
-				t.Error("expected an error to occur, but nothing bad happened")
-			}
-		})
-	}
-}
-
 func TestHandleProfiling(t *testing.T) {
 
 	testCases := []struct {
@@ -308,8 +216,6 @@ func TestHandleProfiling(t *testing.T) {
 			w := httptest.NewRecorder()
 			if tc.serverState == "busy" {
 				h.mux.Lock()
-				h.
-					onGoingRunID = validUID
 			}
 			if tc.serverState == "error" {
 				// prepare an error file
@@ -331,17 +237,17 @@ func TestHandleProfiling(t *testing.T) {
 				t.Errorf("Expected status code %d but was %d", tc.expectedCode, resp.StatusCode)
 			}
 			if tc.serverState == "ready" {
-				if h.onGoingRunID == "" {
+				if !h.mux.IsLocked() {
 					t.Error("expected lock to be created and ongoingRunId not to be empty")
 				}
 			} else if tc.serverState == "busy" {
-				if h.onGoingRunID != validUID {
-					t.Errorf("Expected lock to be locked, with ongoingRunId = %s, but was empty", h.onGoingRunID)
+				if !h.mux.IsLocked() {
+					t.Error("Expected lock to be locked") //, with ongoingRunId = %s, but was empty", h.onGoingRunID)
 
 				}
 			} else if tc.serverState == "error" {
-				if h.onGoingRunID != "" {
-					t.Errorf("Expected lock to be unlocked, but had ongoingRunId = %s", h.onGoingRunID)
+				if h.mux.IsLocked() {
+					t.Error("expected lock to be unlocked") //, but had ongoingRunId = %s", h.onGoingRunID)
 
 				}
 			}
@@ -453,13 +359,13 @@ func TestProcessResults(t *testing.T) {
 				ProfilingRuns: []profilingRun{},
 			}
 			h.mux.Lock()
-			h.onGoingRunID = validUID
+			// h.onGoingRunID = validUID
 			defer cleanup(t)
 			h.processResults(arun, tc.channel)
-			if h.onGoingRunID != "" && !tc.expectedLock {
-				t.Errorf("Shouldnt be locked but was locked by " + h.onGoingRunID)
+			if h.mux.IsLocked() && !tc.expectedLock {
+				t.Errorf("Shouldnt be locked but was locked ") //by " + h.onGoingRunID)
 			}
-			if h.onGoingRunID == "" && tc.expectedLock {
+			if !h.mux.IsLocked() && tc.expectedLock {
 				t.Errorf("Should be locked but wasnt")
 			}
 			if !tc.expectedError {

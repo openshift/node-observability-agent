@@ -5,17 +5,16 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/openshift/node-observability-agent/pkg/connectors"
+	"github.com/openshift/node-observability-agent/pkg/semaphore"
 )
 
 var hlog = logrus.WithField("module", "handler")
@@ -26,8 +25,7 @@ type Handlers struct {
 	NodeIP         string
 	StorageFolder  string
 	CrioUnixSocket string
-	mux            *sync.RWMutex
-	onGoingRunID   string
+	mux            semaphore.LockerWithState
 }
 
 type runType string
@@ -57,14 +55,13 @@ type run struct {
 
 // NewHandlers creates a new instance of Handlers from the given parameters
 func NewHandlers(token string, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers {
-
+	aMux := semaphore.NewSemaphore()
 	return &Handlers{
 		Token:          token,
 		NodeIP:         nodeIP,
 		StorageFolder:  storageFolder,
 		CrioUnixSocket: crioUnixSocket,
-		mux:            &sync.RWMutex{},
-		onGoingRunID:   "",
+		mux:            aMux,
 	}
 }
 
@@ -79,14 +76,7 @@ const (
 // * HTTP 200 if the agent is ready
 func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	if h.errorFileExists() {
-		uid, err := readUIDFromFile(filepath.Join(h.StorageFolder, "agent."+string(errorFile)))
-		if err != nil {
-			http.Error(w, "unable to read error file",
-				http.StatusInternalServerError)
-			hlog.Error("Unable to read error file")
-			return
-		}
-		err = respondBusyOrError(uid, w, r, true)
+		err := respondBusyOrError(w, r, true)
 		if err != nil {
 			http.Error(w, "unable to send response",
 				http.StatusInternalServerError)
@@ -95,13 +85,13 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if h.onGoingRunID == "" {
+	if !h.mux.IsLocked() {
 		_, err := w.Write([]byte(ready))
 		if err != nil {
 			hlog.Errorf("could not send response busy : %v", err)
 		}
 	} else {
-		err := respondBusyOrError(h.onGoingRunID, w, r, false)
+		err := respondBusyOrError(w, r, false)
 		if err != nil {
 			http.Error(w, "unable to send response",
 				http.StatusInternalServerError)
@@ -170,20 +160,7 @@ func (h *Handlers) errorFileExists() bool {
 
 }
 
-func readUIDFromFile(fileName string) (string, error) {
-	var arun *run = &run{}
-	contents, err := ioutil.ReadFile(fileName)
-	if err != nil {
-		return "", err
-	}
-	err = json.Unmarshal(contents, arun)
-	if err != nil {
-		return "", err
-	}
-	return arun.ID.String(), nil
-}
-
-func respondBusyOrError(uid string, w http.ResponseWriter, r *http.Request, isError bool) error {
+func respondBusyOrError(w http.ResponseWriter, r *http.Request, isError bool) error {
 
 	message := ""
 	flusher, ok := w.(http.Flusher)
@@ -194,10 +171,10 @@ func respondBusyOrError(uid string, w http.ResponseWriter, r *http.Request, isEr
 	}
 	if isError {
 		w.WriteHeader(http.StatusInternalServerError)
-		message = uid + " failed."
+		message = "service is stuck in failure."
 	} else {
 		w.WriteHeader(http.StatusConflict)
-		message = uid + " still running"
+		message = "service is still running"
 	}
 	_, err := w.Write([]byte(message))
 	if err != nil {
@@ -214,10 +191,9 @@ func respondBusyOrError(uid string, w http.ResponseWriter, r *http.Request, isEr
 // function to process the results in a goroutine as well
 func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 
-	if h.onGoingRunID != "" {
-		uid := h.onGoingRunID
+	if h.mux.IsLocked() {
 
-		err := respondBusyOrError(uid, w, r, false)
+		err := respondBusyOrError(w, r, false)
 		if err != nil {
 			http.Error(w, "unable to send response",
 				http.StatusInternalServerError)
@@ -226,14 +202,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	} else if h.errorFileExists() {
-		uid, err := readUIDFromFile(filepath.Join(h.StorageFolder, "agent."+string(errorFile)))
-		if err != nil {
-			http.Error(w, "unable to read error file",
-				http.StatusInternalServerError)
-			hlog.Error("Unable to read error file")
-			return
-		}
-		err = respondBusyOrError(uid, w, r, true)
+		err := respondBusyOrError(w, r, true)
 		if err != nil {
 			http.Error(w, "unable to send response",
 				http.StatusInternalServerError)
@@ -252,7 +221,6 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 
 	// Create a lock file with a begin date and a uid
 	h.mux.Lock()
-	h.onGoingRunID = run.ID.String()
 
 	// Channel for collecting results of profiling
 	runResultsChan := make(chan profilingRun)
@@ -282,7 +250,6 @@ func (h *Handlers) processResults(arun run, runResultsChan chan profilingRun) {
 	// unlock as soon as finished processing
 	defer func() {
 		h.mux.Unlock()
-		h.onGoingRunID = ""
 		close(runResultsChan)
 	}()
 	// wait for the results
