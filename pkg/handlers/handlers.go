@@ -46,10 +46,11 @@ func NewHandlers(token string, storageFolder string, crioUnixSocket string, node
 }
 
 const (
-	ready              = "Service is ready"
-	timeout   int      = 35
-	logFile   fileType = "log"
-	errorFile fileType = "err"
+	ready                   = "Service is ready"
+	httpRespErrMsg          = "unable to send response"
+	timeout        int      = 35
+	logFile        fileType = "log"
+	errorFile      fileType = "err"
 )
 
 // Status is called when the agent receives an HTTP request on endpoint /status.
@@ -67,20 +68,20 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	}
 	switch state {
 	case statelocker.InError:
-		err = respondBusyOrError(id.String(), w, r, true)
+		err = respondBusyOrError(id.String(), w, true)
 		if err != nil {
-			http.Error(w, "unable to send response",
+			http.Error(w, httpRespErrMsg,
 				http.StatusInternalServerError)
-			hlog.Error("unable to send response")
+			hlog.Error(httpRespErrMsg)
 			return
 		}
 		return
 	case statelocker.Taken:
-		err := respondBusyOrError(id.String(), w, r, false)
+		err := respondBusyOrError(id.String(), w, false)
 		if err != nil {
-			http.Error(w, "unable to send response",
+			http.Error(w, httpRespErrMsg,
 				http.StatusInternalServerError)
-			hlog.Error("unable to send response")
+			hlog.Error(httpRespErrMsg)
 			return
 		}
 		return
@@ -92,7 +93,7 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendUID(w http.ResponseWriter, r *http.Request, runID uuid.UUID) (runs.Run, error) {
+func sendUID(w http.ResponseWriter, runID uuid.UUID) (runs.Run, error) {
 	response := runs.Run{
 		ID: runID,
 	}
@@ -111,7 +112,7 @@ func sendUID(w http.ResponseWriter, r *http.Request, runID uuid.UUID) (runs.Run,
 	return response, nil
 }
 
-func respondBusyOrError(uid string, w http.ResponseWriter, r *http.Request, isError bool) error {
+func respondBusyOrError(uid string, w http.ResponseWriter, isError bool) error {
 
 	message := ""
 
@@ -146,22 +147,22 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 	switch state {
 	case statelocker.InError:
 		{
-			err := respondBusyOrError(currentUID.String(), w, r, true)
+			err := respondBusyOrError(currentUID.String(), w, true)
 			if err != nil {
-				http.Error(w, "unable to send response",
+				http.Error(w, httpRespErrMsg,
 					http.StatusInternalServerError)
-				hlog.Error("unable to send response")
+				hlog.Error(httpRespErrMsg)
 				return
 			}
 			return
 		}
 	case statelocker.Taken:
 		{
-			err := respondBusyOrError(currentUID.String(), w, r, false)
+			err := respondBusyOrError(currentUID.String(), w, false)
 			if err != nil {
-				http.Error(w, "unable to send response",
+				http.Error(w, httpRespErrMsg,
 					http.StatusInternalServerError)
-				hlog.Error("unable to send response")
+				hlog.Error(httpRespErrMsg)
 				return
 			}
 			return
@@ -169,7 +170,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 	case statelocker.Free:
 		{
 			// Send a HTTP 200 straight away
-			run, err := sendUID(w, r, uidWon)
+			run, err := sendUID(w, uidWon)
 			if err != nil {
 				hlog.Error(err)
 				return

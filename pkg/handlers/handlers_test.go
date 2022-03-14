@@ -126,10 +126,9 @@ func TestSendUID(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := httptest.NewRequest("GET", "http://localhost/pprof", nil)
 			w := httptest.NewRecorder()
 
-			arun, err := sendUID(w, r, uuid.MustParse(validUID))
+			arun, err := sendUID(w, uuid.MustParse(validUID))
 			if err != nil {
 				t.Errorf("error calling createAndSendUID : %v", err)
 			}
