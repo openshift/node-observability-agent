@@ -47,5 +47,5 @@ push.image.rhel8: build.image.rhel8
 	$(CONTAINER_ENGINE) push ${IMG}:${IMAGE_TAG}
 
 deploy: push.image.rhel8
-	oc new-project node-observability-operator
+	oc project node-observability-operator || oc new-project node-observability-operator
 	IMG=$(IMG) hack/kustomize-build.sh | oc apply -f -
