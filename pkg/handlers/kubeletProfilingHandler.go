@@ -7,14 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/openshift/node-observability-agent/pkg/runs"
 )
 
 // ProfileKubelet calls /debug/pprof/profile on the h.NodeIP, thus triggering a kubelet
 // profiling on that node.
 // This call requires an Authorization header, to which the h.Token is passed as Bearer token
-func (h *Handlers) profileKubelet(uid string, client *http.Client) profilingRun {
-	run := profilingRun{
-		Type:      kubeletRun,
+func (h *Handlers) profileKubelet(uid string, client *http.Client) runs.ProfilingRun {
+	run := runs.ProfilingRun{
+		Type:      runs.KubeletRun,
 		BeginDate: time.Now(),
 	}
 

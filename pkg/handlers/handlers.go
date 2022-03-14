@@ -14,7 +14,8 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/openshift/node-observability-agent/pkg/connectors"
-	"github.com/openshift/node-observability-agent/pkg/semaphore"
+	"github.com/openshift/node-observability-agent/pkg/runs"
+	"github.com/openshift/node-observability-agent/pkg/turntaker"
 )
 
 var hlog = logrus.WithField("module", "handler")
@@ -25,48 +26,30 @@ type Handlers struct {
 	NodeIP         string
 	StorageFolder  string
 	CrioUnixSocket string
-	mux            semaphore.LockerWithState
+	// mux            *sync.Mutex
+	// onGoingRunID   string
+	turnTaker turntaker.SingleTaker
 }
 
-type runType string
 type fileType string
-
-const (
-	kubeletRun runType  = "Kubelet"
-	crioRun    runType  = "CRIO"
-	unknownRun runType  = "Unknown"
-	logFile    fileType = "log"
-	errorFile  fileType = "err"
-	timeout    int      = 35
-)
-
-type profilingRun struct {
-	Type       runType
-	Successful bool
-	BeginDate  time.Time
-	EndDate    time.Time
-	Error      string
-}
-
-type run struct {
-	ID            uuid.UUID
-	ProfilingRuns []profilingRun
-}
 
 // NewHandlers creates a new instance of Handlers from the given parameters
 func NewHandlers(token string, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers {
-	aMux := semaphore.NewSemaphore()
+	aTurnTaker := turntaker.NewTurnTaker(filepath.Join(storageFolder, "agent."+string(errorFile)))
 	return &Handlers{
 		Token:          token,
 		NodeIP:         nodeIP,
 		StorageFolder:  storageFolder,
 		CrioUnixSocket: crioUnixSocket,
-		mux:            aMux,
+		turnTaker:      aTurnTaker,
 	}
 }
 
 const (
-	ready = "Service is ready"
+	ready              = "Service is ready"
+	timeout   int      = 35
+	logFile   fileType = "log"
+	errorFile fileType = "err"
 )
 
 // Status is called when the agent receives an HTTP request on endpoint /status.
@@ -75,8 +58,16 @@ const (
 // * HTTP 409 if a previous profiling is still ongoing,
 // * HTTP 200 if the agent is ready
 func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
-	if h.errorFileExists() {
-		err := respondBusyOrError(w, r, true)
+	id, state, err := h.turnTaker.WhoseTurn()
+	if err != nil {
+		http.Error(w, "error retrieving service status",
+			http.StatusInternalServerError)
+		hlog.Errorf("Error retrieving service status : %v", err)
+		return
+	}
+	switch state {
+	case turntaker.InError:
+		err = respondBusyOrError(id.String(), w, r, true)
 		if err != nil {
 			http.Error(w, "unable to send response",
 				http.StatusInternalServerError)
@@ -84,35 +75,26 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		return
-	}
-	if !h.mux.IsLocked() {
-		_, err := w.Write([]byte(ready))
-		if err != nil {
-			hlog.Errorf("could not send response busy : %v", err)
-		}
-	} else {
-		err := respondBusyOrError(w, r, false)
+	case turntaker.Taken:
+		err := respondBusyOrError(id.String(), w, r, false)
 		if err != nil {
 			http.Error(w, "unable to send response",
 				http.StatusInternalServerError)
 			hlog.Error("unable to send response")
 			return
 		}
+		return
+	case turntaker.Free:
+		_, err := w.Write([]byte(ready))
+		if err != nil {
+			hlog.Errorf("could not send response busy : %v", err)
+		}
 	}
 }
 
-func createAndSendUID(w http.ResponseWriter, r *http.Request) (run, error) {
-
-	id := uuid.New()
-	response := run{
-		ID: id,
-	}
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Server does not support Flusher!",
-			http.StatusInternalServerError)
-		return response, fmt.Errorf("no support for Flusher")
+func sendUID(w http.ResponseWriter, r *http.Request, runID uuid.UUID) (runs.Run, error) {
+	response := runs.Run{
+		ID: runID,
 	}
 
 	jsResponse, err := json.Marshal(response)
@@ -126,62 +108,25 @@ func createAndSendUID(w http.ResponseWriter, r *http.Request) (run, error) {
 	if err != nil {
 		hlog.Errorf("Unable to send HTTP response : %v", err)
 	}
-	flusher.Flush()
 	return response, nil
 }
 
-func writeRunToFile(arun run, storageFolder string, fileType fileType) (string, error) {
-	var fileName string
-	if fileType == logFile {
-		fileName = filepath.Join(storageFolder, arun.ID.String()+"."+string(fileType))
-	} else {
-		fileName = filepath.Join(storageFolder, "agent."+string(fileType))
-	}
-
-	bytes, err := json.Marshal(arun)
-	if err != nil {
-		return "", fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%v", string(fileType), arun.ID.String(), err)
-	}
-	err = os.WriteFile(fileName, bytes, 0644)
-	if err != nil {
-		return "", fmt.Errorf("error writing  %s file: %v", fileName, err)
-	}
-	return fileName, nil
-}
-
-func (h *Handlers) errorFileExists() bool {
-	fileName := filepath.Join(h.StorageFolder, "agent."+string(errorFile))
-	//TODO return and handle errors better
-	if _, err := os.Stat(fileName); err != nil {
-		hlog.Errorf("error getting stats for %s:\n%v", fileName, err)
-		return false
-	}
-	return true
-
-}
-
-func respondBusyOrError(w http.ResponseWriter, r *http.Request, isError bool) error {
+func respondBusyOrError(uid string, w http.ResponseWriter, r *http.Request, isError bool) error {
 
 	message := ""
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Server does not support Flusher!",
-			http.StatusInternalServerError)
-		return fmt.Errorf("no support for Flusher")
-	}
+
 	if isError {
 		w.WriteHeader(http.StatusInternalServerError)
-		message = "service is stuck in failure."
+		message = uid + " failed."
 	} else {
 		w.WriteHeader(http.StatusConflict)
-		message = "service is still running"
+		message = uid + " still running"
 	}
 	_, err := w.Write([]byte(message))
 	if err != nil {
 		hlog.Errorf("Unable to send HTTP response : %v", err)
 		return err
 	}
-	flusher.Flush()
 	return nil
 }
 
@@ -191,69 +136,116 @@ func respondBusyOrError(w http.ResponseWriter, r *http.Request, isError bool) er
 // function to process the results in a goroutine as well
 func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 
-	if h.mux.IsLocked() {
-
-		err := respondBusyOrError(w, r, false)
-		if err != nil {
-			http.Error(w, "unable to send response",
-				http.StatusInternalServerError)
-			hlog.Error("unable to send response")
-			return
-		}
-		return
-	} else if h.errorFileExists() {
-		err := respondBusyOrError(w, r, true)
-		if err != nil {
-			http.Error(w, "unable to send response",
-				http.StatusInternalServerError)
-			hlog.Error("unable to send response")
-			return
-		}
-		return
-	}
-
-	// Send a HTTP 200 straight away
-	run, err := createAndSendUID(w, r)
+	//	if h.onGoingRunID != "" {
+	//		uid := h.onGoingRunID
+	//
+	//		err := respondBusyOrError(uid, w, r, false)
+	//		if err != nil {
+	//			http.Error(w, "unable to send response",
+	//				http.StatusInternalServerError)
+	//			hlog.Error("unable to send response")
+	//			return
+	//		}
+	//		return
+	//	} else if h.errorFileExists() {
+	//		uid, err := readUIDFromFile(filepath.Join(h.StorageFolder, "agent."+string(errorFile)))
+	//		if err != nil {
+	//			http.Error(w, "unable to read error file",
+	//				http.StatusInternalServerError)
+	//			hlog.Error("Unable to read error file")
+	//			return
+	//		}
+	//		err = respondBusyOrError(uid, w, r, true)
+	//		if err != nil {
+	// ------------
+	//	if h.mux.IsLocked() {
+	//		err := respondBusyOrError(w, r, false)
+	//		if err != nil {
+	//			http.Error(w, "unable to send response",
+	//				http.StatusInternalServerError)
+	//			hlog.Error("unable to send response")
+	//			return
+	//		}
+	//		return
+	//	} else if h.errorFileExists() {
+	//		err := respondBusyOrError(w, r, true)
+	//		if err != nil {
+	//
+	uidWon, currentUid, state, err := h.turnTaker.TakeTurn()
 	if err != nil {
+		http.Error(w, "service is either busy or in error, try again",
+			http.StatusInternalServerError)
 		hlog.Error(err)
 		return
 	}
 
-	// Create a lock file with a begin date and a uid
-	h.mux.Lock()
-
-	// Channel for collecting results of profiling
-	runResultsChan := make(chan profilingRun)
-
-	// Launch both profilings in parallel as well as the routine to wait for results
-	go func() {
-		//TODO Go back to securely making this request
-		//Prepare http client that ignores tls check
-		transCfg := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	switch state {
+	case turntaker.InError:
+		{
+			err := respondBusyOrError(currentUid.String(), w, r, true)
+			if err != nil {
+				http.Error(w, "unable to send response",
+					http.StatusInternalServerError)
+				hlog.Error("unable to send response")
+				return
+			}
+			return
 		}
-		client := &http.Client{Transport: transCfg}
-		runResultsChan <- h.profileKubelet(run.ID.String(), client)
-	}()
+	case turntaker.Taken:
+		{
+			err := respondBusyOrError(currentUid.String(), w, r, false)
+			if err != nil {
+				http.Error(w, "unable to send response",
+					http.StatusInternalServerError)
+				hlog.Error("unable to send response")
+				return
+			}
+			return
+		}
+	case turntaker.Free:
+		{
+			// Send a HTTP 200 straight away
+			run, err := sendUID(w, r, uidWon)
+			if err != nil {
+				hlog.Error(err)
+				return
+			}
+			// Channel for collecting results of profiling
+			runResultsChan := make(chan runs.ProfilingRun)
 
-	go func() {
-		connector := connectors.Connector{}
-		connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", filepath.Join(h.StorageFolder, "crio-"+run.ID.String()+".pprof")})
-		runResultsChan <- h.profileCrio(run.ID.String(), &connector)
-	}()
+			// Launch both profilings in parallel as well as the routine to wait for results
+			go func() {
+				//TODO Go back to securely making this request
+				//Prepare http client that ignores tls check
+				transCfg := &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				}
+				client := &http.Client{Transport: transCfg}
+				runResultsChan <- h.profileKubelet(run.ID.String(), client)
+			}()
 
-	go func() {
-		h.processResults(run, runResultsChan)
-	}()
+			go func() {
+				connector := connectors.Connector{}
+				connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", filepath.Join(h.StorageFolder, "crio-"+run.ID.String()+".pprof")})
+				runResultsChan <- h.profileCrio(run.ID.String(), &connector)
+			}()
+
+			go h.processResults(run, runResultsChan)
+		}
+	}
+
 }
-func (h *Handlers) processResults(arun run, runResultsChan chan profilingRun) {
+func (h *Handlers) processResults(arun runs.Run, runResultsChan chan runs.ProfilingRun) {
 	// unlock as soon as finished processing
 	defer func() {
-		h.mux.Unlock()
+		err := h.turnTaker.ReleaseTurn(arun)
+		if err != nil {
+			hlog.Fatal(err)
+		}
 		close(runResultsChan)
 	}()
 	// wait for the results
-	arun.ProfilingRuns = []profilingRun{}
+	arun.ProfilingRuns = []runs.ProfilingRun{}
 	isTimeout := false
 	for nb := 0; nb < 2 && !isTimeout; {
 		select {
@@ -262,8 +254,8 @@ func (h *Handlers) processResults(arun run, runResultsChan chan profilingRun) {
 			arun.ProfilingRuns = append(arun.ProfilingRuns, pr)
 		case <-time.After(time.Second * time.Duration(timeout)):
 			//timeout! dont wait anymore
-			prInTimeout := profilingRun{
-				Type:       unknownRun,
+			prInTimeout := runs.ProfilingRun{
+				Type:       runs.UnknownRun,
 				Successful: false,
 				BeginDate:  time.Now(),
 				EndDate:    time.Now(),
@@ -278,28 +270,41 @@ func (h *Handlers) processResults(arun run, runResultsChan chan profilingRun) {
 	// Process the results
 	var errorMessage bytes.Buffer
 	var logMessage bytes.Buffer
-	for _, aRun := range arun.ProfilingRuns {
-		if aRun.Error != "" {
-			errorMessage.WriteString("errors encountered while running " + string(aRun.Type) + ":\n")
-			errorMessage.WriteString(aRun.Error + "\n")
+	for _, aProfRun := range arun.ProfilingRuns {
+		if aProfRun.Error != "" {
+			errorMessage.WriteString("errors encountered while running " + string(aProfRun.Type) + ":\n")
+			errorMessage.WriteString(aProfRun.Error + "\n")
 		}
-		logMessage.WriteString(string(aRun.Type) + " - " + arun.ID.String() + ": " + aRun.BeginDate.String() + " -> " + aRun.EndDate.String() + "\n")
+		logMessage.WriteString(string(aProfRun.Type) + " - " + arun.ID.String() + ": " + aProfRun.BeginDate.String() + " -> " + aProfRun.EndDate.String() + "\n")
 	}
 
-	// replace the lock file by error file in case of errors
 	if errorMessage.Len() > 0 {
 		hlog.Error(errorMessage.String())
-		_, err := writeRunToFile(arun, h.StorageFolder, errorFile)
+		return
+	} else {
+		// no errors : simply log the results and rename lock to log
+		hlog.Info(logMessage.String())
+		_, err := writeRunToLogFile(arun, h.StorageFolder)
+		//important to clear the run so that ReleaseTurn doesnt generate an error file
+		arun = runs.Run{}
 		if err != nil {
 			hlog.Fatal(err)
 		}
-		return
 	}
 
-	// no errors : simply log the results and rename lock to log
-	hlog.Info(logMessage.String())
-	_, err := writeRunToFile(arun, h.StorageFolder, logFile)
+}
+
+func writeRunToLogFile(arun runs.Run, storageFolder string) (string, error) {
+
+	fileName := filepath.Join(storageFolder, arun.ID.String()+"."+string(logFile))
+
+	bytes, err := json.Marshal(arun)
 	if err != nil {
-		hlog.Fatal(err)
+		return "", fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%v", string(logFile), arun.ID.String(), err)
 	}
+	err = os.WriteFile(fileName, bytes, 0644)
+	if err != nil {
+		return "", fmt.Errorf("error writing  %s file: %v", fileName, err)
+	}
+	return fileName, nil
 }
