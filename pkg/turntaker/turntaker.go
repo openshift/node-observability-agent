@@ -26,12 +26,17 @@ type SingleTaker interface {
 	WhoseTurn() (uuid.UUID, State, error)
 }
 
+// TurnTaker struct holds the state of the agent service
+// and ensures its update in racy conditions
 type TurnTaker struct {
 	mux           *sync.RWMutex
 	takerID       uuid.UUID
 	errorFilePath string
 }
 
+// NewTurnTaker creates a mutex for syncing the agent service state
+// the pathToErr parameter is the path to the error file which might
+// be created in case a profiling request is in error.
 func NewTurnTaker(pathToErr string) *TurnTaker {
 	return &TurnTaker{
 		mux:           &sync.RWMutex{},
@@ -40,6 +45,12 @@ func NewTurnTaker(pathToErr string) *TurnTaker {
 	}
 }
 
+// TakeTurn attempts to take the single token available
+// The first return param is the UID created when success
+// The second return parameter is the UID of the job that is currently running (when state is Taken)
+// The third return parameter is the State: Free is returned in case of success, Taken is returned in case
+// a previous job is still running, InError is returned in case the errorFile exists
+// The last parameter returned is the error encountered, if any
 func (m *TurnTaker) TakeTurn() (uuid.UUID, uuid.UUID, State, error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()

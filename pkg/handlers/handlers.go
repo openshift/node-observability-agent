@@ -135,43 +135,7 @@ func respondBusyOrError(uid string, w http.ResponseWriter, r *http.Request, isEr
 // it triggers the kubelet and CRIO profiling in separate goroutines, and launches a separate
 // function to process the results in a goroutine as well
 func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
-
-	//	if h.onGoingRunID != "" {
-	//		uid := h.onGoingRunID
-	//
-	//		err := respondBusyOrError(uid, w, r, false)
-	//		if err != nil {
-	//			http.Error(w, "unable to send response",
-	//				http.StatusInternalServerError)
-	//			hlog.Error("unable to send response")
-	//			return
-	//		}
-	//		return
-	//	} else if h.errorFileExists() {
-	//		uid, err := readUIDFromFile(filepath.Join(h.StorageFolder, "agent."+string(errorFile)))
-	//		if err != nil {
-	//			http.Error(w, "unable to read error file",
-	//				http.StatusInternalServerError)
-	//			hlog.Error("Unable to read error file")
-	//			return
-	//		}
-	//		err = respondBusyOrError(uid, w, r, true)
-	//		if err != nil {
-	// ------------
-	//	if h.mux.IsLocked() {
-	//		err := respondBusyOrError(w, r, false)
-	//		if err != nil {
-	//			http.Error(w, "unable to send response",
-	//				http.StatusInternalServerError)
-	//			hlog.Error("unable to send response")
-	//			return
-	//		}
-	//		return
-	//	} else if h.errorFileExists() {
-	//		err := respondBusyOrError(w, r, true)
-	//		if err != nil {
-	//
-	uidWon, currentUid, state, err := h.turnTaker.TakeTurn()
+	uidWon, currentUID, state, err := h.turnTaker.TakeTurn()
 	if err != nil {
 		http.Error(w, "service is either busy or in error, try again",
 			http.StatusInternalServerError)
@@ -182,7 +146,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 	switch state {
 	case turntaker.InError:
 		{
-			err := respondBusyOrError(currentUid.String(), w, r, true)
+			err := respondBusyOrError(currentUID.String(), w, r, true)
 			if err != nil {
 				http.Error(w, "unable to send response",
 					http.StatusInternalServerError)
@@ -193,7 +157,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		}
 	case turntaker.Taken:
 		{
-			err := respondBusyOrError(currentUid.String(), w, r, false)
+			err := respondBusyOrError(currentUID.String(), w, r, false)
 			if err != nil {
 				http.Error(w, "unable to send response",
 					http.StatusInternalServerError)
