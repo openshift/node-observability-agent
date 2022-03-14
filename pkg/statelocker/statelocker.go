@@ -1,4 +1,4 @@
-package turntaker
+package statelocker
 
 import (
 	"encoding/json"
@@ -20,15 +20,15 @@ const (
 	InError State = "ERROR"
 )
 
-type SingleTaker interface {
-	TakeTurn() (uuid.UUID, uuid.UUID, State, error)
-	ReleaseTurn(runInError runs.Run) error
-	WhoseTurn() (uuid.UUID, State, error)
+type StateLocker interface {
+	Lock() (uuid.UUID, uuid.UUID, State, error)
+	Unlock(runInError runs.Run) error
+	LockInfo() (uuid.UUID, State, error)
 }
 
 // TurnTaker struct holds the state of the agent service
 // and ensures its update in racy conditions
-type TurnTaker struct {
+type StateLock struct {
 	mux           *sync.RWMutex
 	takerID       uuid.UUID
 	errorFilePath string
@@ -37,8 +37,8 @@ type TurnTaker struct {
 // NewTurnTaker creates a mutex for syncing the agent service state
 // the pathToErr parameter is the path to the error file which might
 // be created in case a profiling request is in error.
-func NewTurnTaker(pathToErr string) *TurnTaker {
-	return &TurnTaker{
+func NewStateLock(pathToErr string) *StateLock {
+	return &StateLock{
 		mux:           &sync.RWMutex{},
 		errorFilePath: pathToErr,
 		takerID:       uuid.Nil,
@@ -51,7 +51,7 @@ func NewTurnTaker(pathToErr string) *TurnTaker {
 // The third return parameter is the State: Free is returned in case of success, Taken is returned in case
 // a previous job is still running, InError is returned in case the errorFile exists
 // The last parameter returned is the error encountered, if any
-func (m *TurnTaker) TakeTurn() (uuid.UUID, uuid.UUID, State, error) {
+func (m *StateLock) Lock() (uuid.UUID, uuid.UUID, State, error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 	if m.takerID != uuid.Nil {
@@ -68,7 +68,7 @@ func (m *TurnTaker) TakeTurn() (uuid.UUID, uuid.UUID, State, error) {
 	return m.takerID, uuid.Nil, Free, nil
 }
 
-func (m *TurnTaker) ReleaseTurn(runInError runs.Run) error {
+func (m *StateLock) Unlock(runInError runs.Run) error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 	m.takerID = uuid.Nil
@@ -78,7 +78,7 @@ func (m *TurnTaker) ReleaseTurn(runInError runs.Run) error {
 	return nil
 }
 
-func (m *TurnTaker) WhoseTurn() (uuid.UUID, State, error) {
+func (m *StateLock) LockInfo() (uuid.UUID, State, error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 	if m.errorFileExists() {
@@ -94,14 +94,14 @@ func (m *TurnTaker) WhoseTurn() (uuid.UUID, State, error) {
 	return m.takerID, Free, nil
 }
 
-func (m *TurnTaker) errorFileExists() bool {
+func (m *StateLock) errorFileExists() bool {
 	if _, err := os.Stat(m.errorFilePath); err != nil {
 		return false
 	}
 	return true
 }
 
-func (m *TurnTaker) readUIDFromFile() (uuid.UUID, error) {
+func (m *StateLock) readUIDFromFile() (uuid.UUID, error) {
 	var arun *runs.Run = &runs.Run{}
 	contents, err := ioutil.ReadFile(m.errorFilePath)
 	if err != nil {
@@ -114,7 +114,7 @@ func (m *TurnTaker) readUIDFromFile() (uuid.UUID, error) {
 	return arun.ID, nil
 }
 
-func (m *TurnTaker) writeRunToErrorFile(arun runs.Run) error {
+func (m *StateLock) writeRunToErrorFile(arun runs.Run) error {
 	bytes, err := json.Marshal(arun)
 	if err != nil {
 		return fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%v", string(m.errorFilePath), arun.ID.String(), err)

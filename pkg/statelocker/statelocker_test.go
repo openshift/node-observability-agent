@@ -1,4 +1,4 @@
-package turntaker
+package statelocker
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ const (
 	validUID string = "dd37122b-daaf-4d75-9250-c0747e9c5c47"
 )
 
-func TestTakeTurn(t *testing.T) {
+func TestLock(t *testing.T) {
 	testCases := []struct {
 		name           string
 		previousState  State
@@ -53,7 +53,7 @@ func TestTakeTurn(t *testing.T) {
 		t.Run(tC.name, func(t *testing.T) {
 			var previousJobID uuid.UUID
 			errFileName := "/tmp/agent_tt" + fmt.Sprint(i) + ".err"
-			turnTaker := NewTurnTaker(errFileName)
+			turnTaker := NewStateLock(errFileName)
 			if tC.previousState == InError {
 				previousJobID = uuid.MustParse(validUID)
 				// prepare an error file
@@ -69,9 +69,9 @@ func TestTakeTurn(t *testing.T) {
 				}()
 			}
 			if tC.previousState == Taken {
-				id, _, _, err := turnTaker.TakeTurn()
+				id, _, _, err := turnTaker.Lock()
 				defer func() {
-					err := turnTaker.ReleaseTurn(runs.Run{})
+					err := turnTaker.Unlock(runs.Run{})
 					if err != nil {
 						t.Fatal("unable to release turn")
 					}
@@ -82,9 +82,9 @@ func TestTakeTurn(t *testing.T) {
 				previousJobID = id
 			}
 
-			curID, prevID, s, err := turnTaker.TakeTurn()
+			curID, prevID, s, err := turnTaker.Lock()
 			defer func() {
-				err := turnTaker.ReleaseTurn(runs.Run{})
+				err := turnTaker.Unlock(runs.Run{})
 				if err != nil {
 					t.Fatal("unable to release turn")
 				}
@@ -118,7 +118,7 @@ func TestTakeTurn(t *testing.T) {
 	}
 }
 
-func TestReleaseTurn(t *testing.T) {
+func TestUnlock(t *testing.T) {
 
 	testCases := []struct {
 		name          string
@@ -128,21 +128,21 @@ func TestReleaseTurn(t *testing.T) {
 		expectedUID   uuid.UUID
 	}{
 		{
-			name:          "Turn was Free, releaseTurn succeeds",
+			name:          "Turn was Free, Unlock succeeds",
 			previousState: Free,
 			runInError:    runs.Run{},
 			expectedError: false,
 			expectedUID:   uuid.Nil,
 		},
 		{
-			name:          "Turn was busy, releaseTurn succeeds",
+			name:          "Turn was busy, Unlock succeeds",
 			previousState: Taken,
 			runInError:    runs.Run{},
 			expectedError: false,
 			expectedUID:   uuid.Nil,
 		},
 		{
-			name:          "Turn is released with error, releaseTurn succeeds",
+			name:          "Turn is released with error, Unlock succeeds",
 			previousState: Free,
 			runInError: runs.Run{
 				ID:            uuid.MustParse(validUID),
@@ -156,7 +156,7 @@ func TestReleaseTurn(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			errFileName := "/tmp/agent_rt" + fmt.Sprint(i) + ".err"
-			turnTaker := NewTurnTaker(errFileName)
+			turnTaker := NewStateLock(errFileName)
 			if tc.previousState == InError {
 				// prepare an error file
 				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
@@ -171,9 +171,9 @@ func TestReleaseTurn(t *testing.T) {
 				}()
 			}
 			if tc.previousState == Taken {
-				_, _, _, err := turnTaker.TakeTurn()
+				_, _, _, err := turnTaker.Lock()
 				defer func() {
-					err := turnTaker.ReleaseTurn(runs.Run{})
+					err := turnTaker.Unlock(runs.Run{})
 					if err != nil {
 						t.Fatal("unable to release turn")
 					}
@@ -182,7 +182,7 @@ func TestReleaseTurn(t *testing.T) {
 					t.Fatalf("Unexpected error preparing test: %v", err)
 				}
 			}
-			err := turnTaker.ReleaseTurn(tc.runInError)
+			err := turnTaker.Unlock(tc.runInError)
 			if tc.expectedError && err == nil {
 				t.Error("expected error but there were none")
 			}
@@ -248,12 +248,12 @@ func TestWhoseTurn(t *testing.T) {
 					}
 				}()
 			}
-			turnTaker := NewTurnTaker(errFileName)
+			turnTaker := NewStateLock(errFileName)
 			if tc.previousState == Taken {
-				id, _, _, err := turnTaker.TakeTurn()
+				id, _, _, err := turnTaker.Lock()
 				expectedID = id
 				defer func() {
-					err := turnTaker.ReleaseTurn(runs.Run{})
+					err := turnTaker.Unlock(runs.Run{})
 					if err != nil {
 						t.Fatal("unable to release turn")
 					}
@@ -262,7 +262,7 @@ func TestWhoseTurn(t *testing.T) {
 					t.Fatalf("Unexpected error preparing test: %v", err)
 				}
 			}
-			curID, s, err := turnTaker.WhoseTurn()
+			curID, s, err := turnTaker.LockInfo()
 			if tc.expectedError && err == nil {
 				t.Error("expected error but there were none")
 			}
@@ -312,7 +312,7 @@ func TestErrorFileExists(t *testing.T) {
 					}
 				}()
 			}
-			turnTaker := NewTurnTaker(errorFile)
+			turnTaker := NewStateLock(errorFile)
 			t.Logf("%v", tc)
 			result := turnTaker.errorFileExists()
 			if tc.expected != result {

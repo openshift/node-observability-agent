@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/openshift/node-observability-agent/pkg/runs"
-	"github.com/openshift/node-observability-agent/pkg/turntaker"
+	"github.com/openshift/node-observability-agent/pkg/statelocker"
 )
 
 const (
@@ -67,9 +67,9 @@ func TestStatus(t *testing.T) {
 			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 			var cur uuid.UUID
 			if tc.isBusy {
-				c, _, _, err := h.turnTaker.TakeTurn()
+				c, _, _, err := h.stateLocker.Lock()
 				defer func() {
-					err := h.turnTaker.ReleaseTurn(runs.Run{})
+					err := h.stateLocker.Unlock(runs.Run{})
 					if err != nil {
 						t.Fatal("unable to release turn")
 					}
@@ -167,14 +167,14 @@ func TestHandleProfiling(t *testing.T) {
 		serverState    string
 		errFileContent string
 		expectedCode   int
-		expectedState  turntaker.State
+		expectedState  statelocker.State
 		expectedError  bool
 	}{
 		{
 			name:          "Server is ready creates lock, triggers pprof for crio+kubelet and answers 200",
 			serverState:   "ready",
 			expectedCode:  http.StatusOK,
-			expectedState: turntaker.Taken,
+			expectedState: statelocker.Taken,
 			expectedError: false,
 		},
 		{
@@ -182,7 +182,7 @@ func TestHandleProfiling(t *testing.T) {
 			serverState:    "error",
 			errFileContent: "{\"ID\":\"" + validUID + "\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}",
 			expectedCode:   http.StatusInternalServerError,
-			expectedState:  turntaker.InError,
+			expectedState:  statelocker.InError,
 			expectedError:  false,
 		},
 		{
@@ -190,14 +190,14 @@ func TestHandleProfiling(t *testing.T) {
 			serverState:    "error",
 			errFileContent: "{\"ID" + validUID + "\",\"ProfilingRuns\":{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}",
 			expectedCode:   http.StatusInternalServerError,
-			expectedState:  turntaker.InError,
+			expectedState:  statelocker.InError,
 			expectedError:  true,
 		},
 		{
 			name:          "Server is busy should send 409 immediately",
 			serverState:   "busy",
 			expectedCode:  http.StatusConflict,
-			expectedState: turntaker.Taken,
+			expectedState: statelocker.Taken,
 			expectedError: false,
 		},
 	}
@@ -208,9 +208,9 @@ func TestHandleProfiling(t *testing.T) {
 			r := httptest.NewRequest("GET", "http://localhost/status", nil)
 			w := httptest.NewRecorder()
 			if tc.serverState == "busy" {
-				_, _, _, err := h.turnTaker.TakeTurn()
+				_, _, _, err := h.stateLocker.Lock()
 				defer func() {
-					err := h.turnTaker.ReleaseTurn(runs.Run{})
+					err := h.stateLocker.Unlock(runs.Run{})
 					if err != nil {
 						t.Fatal("unable to release turn")
 					}
@@ -238,7 +238,7 @@ func TestHandleProfiling(t *testing.T) {
 			if resp.StatusCode != tc.expectedCode {
 				t.Errorf("Expected status code %d but was %d", tc.expectedCode, resp.StatusCode)
 			}
-			uid, s, err := h.turnTaker.WhoseTurn()
+			uid, s, err := h.stateLocker.LockInfo()
 			if tc.expectedState != s {
 				t.Errorf("expected state to become %s, but was %s", tc.expectedState, s)
 			}
@@ -248,7 +248,7 @@ func TestHandleProfiling(t *testing.T) {
 			if !tc.expectedError && err != nil {
 				t.Errorf("Unexpected error : %v", err)
 			}
-			if tc.expectedState != turntaker.InError {
+			if tc.expectedState != statelocker.InError {
 				if uid == uuid.Nil {
 					t.Error("uid was empty when it shouldnt")
 				}
@@ -360,9 +360,9 @@ func TestProcessResults(t *testing.T) {
 				ID:            uuid.MustParse(validUID),
 				ProfilingRuns: []runs.ProfilingRun{},
 			}
-			_, _, _, err := h.turnTaker.TakeTurn()
+			_, _, _, err := h.stateLocker.Lock()
 			defer func() {
-				err := h.turnTaker.ReleaseTurn(runs.Run{})
+				err := h.stateLocker.Unlock(runs.Run{})
 				if err != nil {
 					t.Fatal("unable to release turn")
 				}
@@ -372,14 +372,14 @@ func TestProcessResults(t *testing.T) {
 			}
 			defer cleanup(t)
 			h.processResults(arun, tc.channel)
-			uid, s, err := h.turnTaker.WhoseTurn()
+			uid, s, err := h.stateLocker.LockInfo()
 			if err != nil {
 				t.Errorf("unexpected error : %v", err)
 			}
-			if !tc.expectedLock && s == turntaker.Taken {
+			if !tc.expectedLock && s == statelocker.Taken {
 				t.Errorf("Shouldnt be locked but was locked by %v", uid)
 			}
-			if tc.expectedLock && s == turntaker.Free {
+			if tc.expectedLock && s == statelocker.Free {
 				t.Errorf("Should be locked but wasnt")
 			}
 			if !tc.expectedError {

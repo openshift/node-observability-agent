@@ -15,7 +15,7 @@ import (
 
 	"github.com/openshift/node-observability-agent/pkg/connectors"
 	"github.com/openshift/node-observability-agent/pkg/runs"
-	"github.com/openshift/node-observability-agent/pkg/turntaker"
+	"github.com/openshift/node-observability-agent/pkg/statelocker"
 )
 
 var hlog = logrus.WithField("module", "handler")
@@ -28,20 +28,20 @@ type Handlers struct {
 	CrioUnixSocket string
 	// mux            *sync.Mutex
 	// onGoingRunID   string
-	turnTaker turntaker.SingleTaker
+	stateLocker statelocker.StateLocker
 }
 
 type fileType string
 
 // NewHandlers creates a new instance of Handlers from the given parameters
 func NewHandlers(token string, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers {
-	aTurnTaker := turntaker.NewTurnTaker(filepath.Join(storageFolder, "agent."+string(errorFile)))
+	aTurnTaker := statelocker.NewStateLock(filepath.Join(storageFolder, "agent."+string(errorFile)))
 	return &Handlers{
 		Token:          token,
 		NodeIP:         nodeIP,
 		StorageFolder:  storageFolder,
 		CrioUnixSocket: crioUnixSocket,
-		turnTaker:      aTurnTaker,
+		stateLocker:    aTurnTaker,
 	}
 }
 
@@ -58,7 +58,7 @@ const (
 // * HTTP 409 if a previous profiling is still ongoing,
 // * HTTP 200 if the agent is ready
 func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
-	id, state, err := h.turnTaker.WhoseTurn()
+	id, state, err := h.stateLocker.LockInfo()
 	if err != nil {
 		http.Error(w, "error retrieving service status",
 			http.StatusInternalServerError)
@@ -66,7 +66,7 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch state {
-	case turntaker.InError:
+	case statelocker.InError:
 		err = respondBusyOrError(id.String(), w, r, true)
 		if err != nil {
 			http.Error(w, "unable to send response",
@@ -75,7 +75,7 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		return
-	case turntaker.Taken:
+	case statelocker.Taken:
 		err := respondBusyOrError(id.String(), w, r, false)
 		if err != nil {
 			http.Error(w, "unable to send response",
@@ -84,7 +84,7 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		return
-	case turntaker.Free:
+	case statelocker.Free:
 		_, err := w.Write([]byte(ready))
 		if err != nil {
 			hlog.Errorf("could not send response busy : %v", err)
@@ -135,7 +135,7 @@ func respondBusyOrError(uid string, w http.ResponseWriter, r *http.Request, isEr
 // it triggers the kubelet and CRIO profiling in separate goroutines, and launches a separate
 // function to process the results in a goroutine as well
 func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
-	uidWon, currentUID, state, err := h.turnTaker.TakeTurn()
+	uidWon, currentUID, state, err := h.stateLocker.Lock()
 	if err != nil {
 		http.Error(w, "service is either busy or in error, try again",
 			http.StatusInternalServerError)
@@ -144,7 +144,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch state {
-	case turntaker.InError:
+	case statelocker.InError:
 		{
 			err := respondBusyOrError(currentUID.String(), w, r, true)
 			if err != nil {
@@ -155,7 +155,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-	case turntaker.Taken:
+	case statelocker.Taken:
 		{
 			err := respondBusyOrError(currentUID.String(), w, r, false)
 			if err != nil {
@@ -166,7 +166,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-	case turntaker.Free:
+	case statelocker.Free:
 		{
 			// Send a HTTP 200 straight away
 			run, err := sendUID(w, r, uidWon)
@@ -202,7 +202,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) processResults(arun runs.Run, runResultsChan chan runs.ProfilingRun) {
 	// unlock as soon as finished processing
 	defer func() {
-		err := h.turnTaker.ReleaseTurn(arun)
+		err := h.stateLocker.Unlock(arun)
 		if err != nil {
 			hlog.Fatal(err)
 		}
