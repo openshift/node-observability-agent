@@ -98,20 +98,14 @@ func TestLock(t *testing.T) {
 			if tC.expectedState != s {
 				t.Errorf("expected state to be %s but was %s", tC.expectedState, s)
 			}
-			if tC.previousState == Taken {
-				if previousJobID != prevID {
-					t.Errorf("expected turn to be with %v, but was %v", previousJobID, prevID)
-				}
+			if tC.previousState == Taken && previousJobID != prevID {
+				t.Errorf("expected turn to be with %v, but was %v", previousJobID, prevID)
 			}
-			if tC.previousState == Free {
-				if curID == uuid.Nil {
-					t.Error("expected id of new job to be returned but was empty")
-				}
+			if tC.previousState == Free && curID == uuid.Nil {
+				t.Error("expected id of new job to be returned but was empty")
 			}
-			if tC.previousState == InError && !tC.expectedError {
-				if previousJobID != prevID {
-					t.Errorf("expected turn to be with %v, but was %v", previousJobID, prevID)
-				}
+			if tC.previousState == InError && !tC.expectedError && previousJobID != prevID {
+				t.Errorf("expected turn to be with %v, but was %v", previousJobID, prevID)
 			}
 
 		})
