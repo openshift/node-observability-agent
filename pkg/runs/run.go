@@ -18,8 +18,8 @@ const (
 type ProfilingRun struct {
 	Type       RunType
 	Successful bool
-	BeginDate  time.Time
-	EndDate    time.Time
+	BeginTime  time.Time
+	EndTime    time.Time
 	Error      string
 }
 

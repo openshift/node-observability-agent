@@ -51,8 +51,8 @@ func TestProfileCrio(t *testing.T) {
 			if tc.expected.Type != pr.Type {
 				t.Errorf("Expecting a ProfilingRun of type %s but was %s", tc.expected.Type, pr.Type)
 			}
-			if pr.BeginDate.After(pr.EndDate) {
-				t.Errorf("Expecting the registered beginDate %v to be before the profiling endDate %v but was not", pr.BeginDate, pr.EndDate)
+			if pr.BeginTime.After(pr.EndTime) {
+				t.Errorf("Expecting the registered beginDate %v to be before the profiling endDate %v but was not", pr.BeginTime, pr.EndTime)
 			}
 			if tc.expected.Successful != pr.Successful {
 				t.Errorf("Expecting ProfilingRun to be successful=%t but was %t", tc.expected.Successful, pr.Successful)

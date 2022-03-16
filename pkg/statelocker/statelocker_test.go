@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -23,29 +24,29 @@ func TestLock(t *testing.T) {
 		expectedError  bool
 	}{
 		{
-			name:          "turnTaker was free, can take turn",
+			name:          "stateLock was free, can lock",
 			previousState: Free,
 			expectedState: Free,
 			expectedError: false,
 		},
 		{
-			name:          "turnTaker was taken, returns the id of running job",
+			name:          "stateLock was taken, returns the id of running job",
 			previousState: Taken,
 			expectedState: Taken,
 			expectedError: false,
 		},
 		{
-			name:           "turnTaker was in error, returns the id of job in error",
+			name:           "stateLock was in error, returns the id of job in error",
 			previousState:  InError,
 			expectedState:  InError,
-			errFileContent: "{\"ID\":\"" + validUID + "\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}",
+			errFileContent: "{\"ID\":\"" + validUID + "\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginTime\":\"2022-03-03T10:10:17.188097819Z\",\"EndTime\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginTime\":\"2022-03-03T10:10:17.188499431Z\",\"EndTime\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}",
 			expectedError:  false,
 		},
 		{
-			name:           "turnTaker was in error, and unable to read error file, error",
+			name:           "stateLock was in error, and unable to read error file, error",
 			previousState:  InError,
 			expectedState:  InError,
-			errFileContent: "{\"ID" + validUID + "\",\"ProfilingRuns\":{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}",
+			errFileContent: "{\"ID" + validUID + "\",\"ProfilingRuns\":{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginTime\":\"2022-03-03T10:10:17.188097819Z\",\"EndTime\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginTime\":\"2022-03-03T10:10:17.188499431Z\",\"EndTime\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}",
 			expectedError:  true,
 		},
 	}
@@ -53,7 +54,7 @@ func TestLock(t *testing.T) {
 		t.Run(tC.name, func(t *testing.T) {
 			var previousJobID uuid.UUID
 			errFileName := "/tmp/agent_tt" + fmt.Sprint(i) + ".err"
-			turnTaker := NewStateLock(errFileName)
+			stateLock := NewStateLock(errFileName)
 			if tC.previousState == InError {
 				previousJobID = uuid.MustParse(validUID)
 				// prepare an error file
@@ -69,26 +70,14 @@ func TestLock(t *testing.T) {
 				}()
 			}
 			if tC.previousState == Taken {
-				id, _, _, err := turnTaker.Lock()
-				defer func() {
-					err := turnTaker.Unlock(runs.Run{})
-					if err != nil {
-						t.Fatal("unable to release turn")
-					}
-				}()
+				id, _, err := stateLock.Lock()
 				if err != nil {
 					t.Fatalf("Unexpected error preparing test: %v", err)
 				}
 				previousJobID = id
 			}
 
-			curID, prevID, s, err := turnTaker.Lock()
-			defer func() {
-				err := turnTaker.Unlock(runs.Run{})
-				if err != nil {
-					t.Fatal("unable to release turn")
-				}
-			}()
+			theID, s, err := stateLock.Lock()
 			if tC.expectedError && err == nil {
 				t.Error("expected error but there were none")
 			}
@@ -98,20 +87,84 @@ func TestLock(t *testing.T) {
 			if tC.expectedState != s {
 				t.Errorf("expected state to be %s but was %s", tC.expectedState, s)
 			}
-			if tC.previousState == Taken && previousJobID != prevID {
-				t.Errorf("expected turn to be with %v, but was %v", previousJobID, prevID)
+			if tC.previousState == Taken && previousJobID != theID {
+				t.Errorf("expected to be locked by %v, but was %v", previousJobID, theID)
 			}
-			if tC.previousState == Free && curID == uuid.Nil {
+			if tC.previousState == Free && theID == uuid.Nil {
 				t.Error("expected id of new job to be returned but was empty")
 			}
-			if tC.previousState == InError && !tC.expectedError && previousJobID != prevID {
-				t.Errorf("expected turn to be with %v, but was %v", previousJobID, prevID)
+			if tC.previousState == InError && !tC.expectedError && previousJobID != theID {
+				t.Errorf("expected to be locked by %v, but was %v", previousJobID, theID)
 			}
 
 		})
 	}
 }
 
+func TestSetError(t *testing.T) {
+
+	testCases := []struct {
+		name          string
+		previousState State
+		runInError    runs.Run
+		expectedError bool
+		expectedUID   uuid.UUID
+	}{
+		{
+			name:          "Locked, succeed to write error file",
+			previousState: Taken,
+			runInError: runs.Run{
+				ID: uuid.MustParse(validUID),
+				ProfilingRuns: []runs.ProfilingRun{
+					{
+						Type:       runs.KubeletRun,
+						Successful: false,
+						BeginTime:  time.Now(),
+						EndTime:    time.Now(),
+						Error:      "Fake Error",
+					},
+					{
+						Type:       runs.CrioRun,
+						Successful: true,
+						BeginTime:  time.Now(),
+						EndTime:    time.Now(),
+						Error:      "",
+					},
+				},
+			},
+			expectedError: false,
+			expectedUID:   uuid.MustParse(validUID),
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			errFileName := "/tmp/agent_se" + fmt.Sprint(i) + ".err"
+			defer func() {
+				if err := os.Remove(errFileName); err != nil {
+					t.Error(err)
+				}
+			}()
+			stateLock := NewStateLock(errFileName)
+			err := stateLock.SetError(tc.runInError)
+			if tc.expectedError && err == nil {
+				t.Error("expected error but found none")
+			}
+			if !tc.expectedError && err != nil {
+				t.Errorf("unexpected error : %v", err)
+			}
+			uid, err := stateLock.readUIDFromFile()
+			if tc.expectedError && err == nil {
+				t.Error("expected error but found none")
+			}
+			if !tc.expectedError && err != nil {
+				t.Errorf("unexpected error : %v", err)
+			}
+			if !tc.expectedError && tc.expectedUID != uid {
+				t.Errorf("expected uid %v, but was %v", tc.expectedUID, uid)
+			}
+		})
+	}
+}
 func TestUnlock(t *testing.T) {
 
 	testCases := []struct {
@@ -122,22 +175,22 @@ func TestUnlock(t *testing.T) {
 		expectedUID   uuid.UUID
 	}{
 		{
-			name:          "Turn was Free, Unlock succeeds",
+			name:          "StateLock was Free, Unlock succeeds",
 			previousState: Free,
 			runInError:    runs.Run{},
 			expectedError: false,
 			expectedUID:   uuid.Nil,
 		},
 		{
-			name:          "Turn was busy, Unlock succeeds",
+			name:          "StateLock was busy, Unlock succeeds",
 			previousState: Taken,
 			runInError:    runs.Run{},
 			expectedError: false,
 			expectedUID:   uuid.Nil,
 		},
 		{
-			name:          "Turn is released with error, Unlock succeeds",
-			previousState: Free,
+			name:          "StateLock was in error, Unlock succeeds",
+			previousState: InError,
 			runInError: runs.Run{
 				ID:            uuid.MustParse(validUID),
 				ProfilingRuns: []runs.ProfilingRun{},
@@ -149,11 +202,11 @@ func TestUnlock(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			errFileName := "/tmp/agent_rt" + fmt.Sprint(i) + ".err"
-			turnTaker := NewStateLock(errFileName)
+			errFileName := "/tmp/agent_u" + fmt.Sprint(i) + ".err"
+			stateLock := NewStateLock(errFileName)
 			if tc.previousState == InError {
 				// prepare an error file
-				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
+				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginTime\":\"2022-03-03T10:10:17.188097819Z\",\"EndTime\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginTime\":\"2022-03-03T10:10:17.188499431Z\",\"EndTime\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
 				err := os.WriteFile(errFileName, []byte(fileContent), 0644)
 				if err != nil {
 					t.Error(err)
@@ -165,32 +218,32 @@ func TestUnlock(t *testing.T) {
 				}()
 			}
 			if tc.previousState == Taken {
-				_, _, _, err := turnTaker.Lock()
+				_, _, err := stateLock.Lock()
 				defer func() {
-					err := turnTaker.Unlock(runs.Run{})
+					err := stateLock.Unlock()
 					if err != nil {
-						t.Fatal("unable to release turn")
+						t.Fatal("unable to release lock")
 					}
 				}()
 				if err != nil {
 					t.Fatalf("Unexpected error preparing test: %v", err)
 				}
 			}
-			err := turnTaker.Unlock(tc.runInError)
+			err := stateLock.Unlock()
 			if tc.expectedError && err == nil {
 				t.Error("expected error but there were none")
 			}
 			if !tc.expectedError && err != nil {
 				t.Errorf("unexpected error : %v", err)
 			}
-			if tc.expectedUID != turnTaker.takerID {
-				t.Errorf("Expected UID to be nil but was %v", turnTaker.takerID)
+			if tc.expectedUID != stateLock.takerID {
+				t.Errorf("Expected UID to be nil but was %v", stateLock.takerID)
 			}
 		})
 	}
 }
 
-func TestWhoseTurn(t *testing.T) {
+func TestLockInfo(t *testing.T) {
 	testCases := []struct {
 		name          string
 		previousState State
@@ -199,21 +252,21 @@ func TestWhoseTurn(t *testing.T) {
 		expectedState State
 	}{
 		{
-			name:          "Turn was Free, whoseTurn returns Free",
+			name:          "Lock was Free, LockInfo returns Free",
 			previousState: Free,
 			runInError:    runs.Run{},
 			expectedError: false,
 			expectedState: Free,
 		},
 		{
-			name:          "Turn was Taken, whoseTurn returns Taken",
+			name:          "Lock was Taken, LockInfo returns Taken",
 			previousState: Taken,
 			runInError:    runs.Run{},
 			expectedError: false,
 			expectedState: Taken,
 		},
 		{
-			name:          "Turn was InError, whoseTurn returns InError",
+			name:          "Lock was InError, LockInfo returns InError",
 			previousState: InError,
 			runInError: runs.Run{
 				ID:            uuid.MustParse(validUID),
@@ -231,7 +284,7 @@ func TestWhoseTurn(t *testing.T) {
 			if tc.previousState == InError {
 				expectedID = uuid.MustParse(validUID)
 				// prepare an error file
-				fileContent := "{\"ID\":\"" + validUID + "\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
+				fileContent := "{\"ID\":\"" + validUID + "\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginTime\":\"2022-03-03T10:10:17.188097819Z\",\"EndTime\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginTime\":\"2022-03-03T10:10:17.188499431Z\",\"EndTime\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
 				err := os.WriteFile(errFileName, []byte(fileContent), 0644)
 				if err != nil {
 					t.Error(err)
@@ -242,21 +295,21 @@ func TestWhoseTurn(t *testing.T) {
 					}
 				}()
 			}
-			turnTaker := NewStateLock(errFileName)
+			stateLock := NewStateLock(errFileName)
 			if tc.previousState == Taken {
-				id, _, _, err := turnTaker.Lock()
+				id, _, err := stateLock.Lock()
 				expectedID = id
 				defer func() {
-					err := turnTaker.Unlock(runs.Run{})
+					err := stateLock.Unlock()
 					if err != nil {
-						t.Fatal("unable to release turn")
+						t.Fatal("unable to release lock")
 					}
 				}()
 				if err != nil {
 					t.Fatalf("Unexpected error preparing test: %v", err)
 				}
 			}
-			curID, s, err := turnTaker.LockInfo()
+			curID, s, err := stateLock.LockInfo()
 			if tc.expectedError && err == nil {
 				t.Error("expected error but there were none")
 			}
@@ -295,7 +348,7 @@ func TestErrorFileExists(t *testing.T) {
 
 			if tc.expected {
 				// prepare an error file
-				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginDate\":\"2022-03-03T10:10:17.188097819Z\",\"EndDate\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginDate\":\"2022-03-03T10:10:17.188499431Z\",\"EndDate\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
+				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginTime\":\"2022-03-03T10:10:17.188097819Z\",\"EndTime\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginTime\":\"2022-03-03T10:10:17.188499431Z\",\"EndTime\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
 				err := os.WriteFile(errorFile, []byte(fileContent), 0644)
 				if err != nil {
 					t.Error(err)
@@ -306,9 +359,9 @@ func TestErrorFileExists(t *testing.T) {
 					}
 				}()
 			}
-			turnTaker := NewStateLock(errorFile)
+			stateLock := NewStateLock(errorFile)
 			t.Logf("%v", tc)
-			result := turnTaker.errorFileExists()
+			result := stateLock.errorFileExists()
 			if tc.expected != result {
 				t.Errorf("Expected errorFileExists = %v but was %v", tc.expected, result)
 			}

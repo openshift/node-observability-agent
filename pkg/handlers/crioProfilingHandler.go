@@ -16,11 +16,11 @@ func (h *Handlers) profileCrio(uid string, cmd connectors.CmdWrapper) runs.Profi
 
 	run := runs.ProfilingRun{
 		Type:      runs.CrioRun,
-		BeginDate: time.Now(),
+		BeginTime: time.Now(),
 	}
 
 	message, err := cmd.CmdExec()
-	run.EndDate = time.Now()
+	run.EndTime = time.Now()
 	if err != nil {
 		run.Error = fmt.Sprintf("error running CRIO profiling :\n%s", message)
 	} else {

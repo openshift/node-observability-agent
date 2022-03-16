@@ -35,13 +35,13 @@ type fileType string
 
 // NewHandlers creates a new instance of Handlers from the given parameters
 func NewHandlers(token string, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers {
-	aTurnTaker := statelocker.NewStateLock(filepath.Join(storageFolder, "agent."+string(errorFile)))
+	aStateLocker := statelocker.NewStateLock(filepath.Join(storageFolder, "agent."+string(errorFile)))
 	return &Handlers{
 		Token:          token,
 		NodeIP:         nodeIP,
 		StorageFolder:  storageFolder,
 		CrioUnixSocket: crioUnixSocket,
-		stateLocker:    aTurnTaker,
+		stateLocker:    aStateLocker,
 	}
 }
 
@@ -75,7 +75,6 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 			hlog.Error(httpRespErrMsg)
 			return
 		}
-		return
 	case statelocker.Taken:
 		err := respondBusyOrError(id.String(), w, false)
 		if err != nil {
@@ -84,7 +83,6 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 			hlog.Error(httpRespErrMsg)
 			return
 		}
-		return
 	case statelocker.Free:
 		_, err := w.Write([]byte(ready))
 		if err != nil {
@@ -93,7 +91,7 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendUID(w http.ResponseWriter, runID uuid.UUID) (runs.Run, error) {
+func sendUID(w http.ResponseWriter, runID uuid.UUID) error {
 	response := runs.Run{
 		ID: runID,
 	}
@@ -101,7 +99,7 @@ func sendUID(w http.ResponseWriter, runID uuid.UUID) (runs.Run, error) {
 	jsResponse, err := json.Marshal(response)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return response, err
+		return err
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -109,7 +107,7 @@ func sendUID(w http.ResponseWriter, runID uuid.UUID) (runs.Run, error) {
 	if err != nil {
 		hlog.Errorf("Unable to send HTTP response : %v", err)
 	}
-	return response, nil
+	return nil
 }
 
 func respondBusyOrError(uid string, w http.ResponseWriter, isError bool) error {
@@ -136,7 +134,7 @@ func respondBusyOrError(uid string, w http.ResponseWriter, isError bool) error {
 // it triggers the kubelet and CRIO profiling in separate goroutines, and launches a separate
 // function to process the results in a goroutine as well
 func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
-	uidWon, currentUID, state, err := h.stateLocker.Lock()
+	uid, state, err := h.stateLocker.Lock()
 	if err != nil {
 		http.Error(w, "service is either busy or in error, try again",
 			http.StatusInternalServerError)
@@ -147,7 +145,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 	switch state {
 	case statelocker.InError:
 		{
-			err := respondBusyOrError(currentUID.String(), w, true)
+			err := respondBusyOrError(uid.String(), w, true)
 			if err != nil {
 				http.Error(w, httpRespErrMsg,
 					http.StatusInternalServerError)
@@ -158,7 +156,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		}
 	case statelocker.Taken:
 		{
-			err := respondBusyOrError(currentUID.String(), w, false)
+			err := respondBusyOrError(uid.String(), w, false)
 			if err != nil {
 				http.Error(w, httpRespErrMsg,
 					http.StatusInternalServerError)
@@ -169,12 +167,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		}
 	case statelocker.Free:
 		{
-			// Send a HTTP 200 straight away
-			run, err := sendUID(w, uidWon)
-			if err != nil {
-				hlog.Error(err)
-				return
-			}
+
 			// Channel for collecting results of profiling
 			runResultsChan := make(chan runs.ProfilingRun)
 
@@ -186,24 +179,34 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 				}
 				client := &http.Client{Transport: transCfg}
-				runResultsChan <- h.profileKubelet(run.ID.String(), client)
+				runResultsChan <- h.profileKubelet(uid.String(), client)
 			}()
 
 			go func() {
 				connector := connectors.Connector{}
-				connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", filepath.Join(h.StorageFolder, "crio-"+run.ID.String()+".pprof")})
-				runResultsChan <- h.profileCrio(run.ID.String(), &connector)
+				connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", filepath.Join(h.StorageFolder, "crio-"+uid.String()+".pprof")})
+				runResultsChan <- h.profileCrio(uid.String(), &connector)
 			}()
 
-			go h.processResults(run, runResultsChan)
+			go h.processResults(uid, runResultsChan)
+			// Send a HTTP 200 straight away
+			err := sendUID(w, uid)
+			if err != nil {
+				hlog.Error(err)
+				return
+			}
 		}
 	}
 
 }
-func (h *Handlers) processResults(arun runs.Run, runResultsChan chan runs.ProfilingRun) {
+func (h *Handlers) processResults(uid uuid.UUID, runResultsChan chan runs.ProfilingRun) {
+	arun := runs.Run{
+		ID:            uid,
+		ProfilingRuns: []runs.ProfilingRun{},
+	}
 	// unlock as soon as finished processing
 	defer func() {
-		err := h.stateLocker.Unlock(arun)
+		err := h.stateLocker.Unlock()
 		if err != nil {
 			hlog.Fatal(err)
 		}
@@ -222,8 +225,8 @@ func (h *Handlers) processResults(arun runs.Run, runResultsChan chan runs.Profil
 			prInTimeout := runs.ProfilingRun{
 				Type:       runs.UnknownRun,
 				Successful: false,
-				BeginDate:  time.Now(),
-				EndDate:    time.Now(),
+				BeginTime:  time.Now(),
+				EndTime:    time.Now(),
 				Error:      fmt.Sprintf("timeout after waiting %ds", timeout),
 			}
 			prInTimeout.Error = fmt.Sprintf("timeout after waiting %ds", timeout)
@@ -235,28 +238,28 @@ func (h *Handlers) processResults(arun runs.Run, runResultsChan chan runs.Profil
 	// Process the results
 	var errorMessage bytes.Buffer
 	var logMessage bytes.Buffer
-	for _, aProfRun := range arun.ProfilingRuns {
-		if aProfRun.Error != "" {
-			errorMessage.WriteString("errors encountered while running " + string(aProfRun.Type) + ":\n")
-			errorMessage.WriteString(aProfRun.Error + "\n")
+	for _, profRun := range arun.ProfilingRuns {
+		if profRun.Error != "" {
+			errorMessage.WriteString("errors encountered while running " + string(profRun.Type) + ":\n")
+			errorMessage.WriteString(profRun.Error + "\n")
 		}
-		logMessage.WriteString(string(aProfRun.Type) + " - " + arun.ID.String() + ": " + aProfRun.BeginDate.String() + " -> " + aProfRun.EndDate.String() + "\n")
+		logMessage.WriteString(string(profRun.Type) + " - " + arun.ID.String() + ": " + profRun.BeginTime.String() + " -> " + profRun.EndTime.String() + "\n")
 	}
 
 	if errorMessage.Len() > 0 {
 		hlog.Error(errorMessage.String())
-		return
+		err := h.stateLocker.SetError(arun)
+		if err != nil {
+			hlog.Fatal(err)
+		}
 	} else {
-		// no errors : simply log the results and rename lock to log
+		// no errors : simply log the results
 		hlog.Info(logMessage.String())
 		_, err := writeRunToLogFile(arun, h.StorageFolder)
-		//important to clear the run so that ReleaseTurn doesnt generate an error file
-		arun = runs.Run{}
 		if err != nil {
 			hlog.Fatal(err)
 		}
 	}
-
 }
 
 func writeRunToLogFile(arun runs.Run, storageFolder string) (string, error) {
@@ -265,11 +268,11 @@ func writeRunToLogFile(arun runs.Run, storageFolder string) (string, error) {
 
 	bytes, err := json.Marshal(arun)
 	if err != nil {
-		return "", fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%v", string(logFile), arun.ID.String(), err)
+		return "", fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%w", string(logFile), arun.ID.String(), err)
 	}
 	err = os.WriteFile(fileName, bytes, 0644)
 	if err != nil {
-		return "", fmt.Errorf("error writing  %s file: %v", fileName, err)
+		return "", fmt.Errorf("error writing  %s file: %w", fileName, err)
 	}
 	return fileName, nil
 }
