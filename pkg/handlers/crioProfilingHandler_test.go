@@ -5,19 +5,20 @@ import (
 	"testing"
 
 	"github.com/openshift/node-observability-agent/pkg/connectors"
+	"github.com/openshift/node-observability-agent/pkg/runs"
 )
 
 func TestProfileCrio(t *testing.T) {
 	testCases := []struct {
 		name      string
 		connector connectors.CmdWrapper
-		expected  profilingRun
+		expected  runs.ProfilingRun
 	}{
 		{
 			name:      "Curl command successful, OK",
 			connector: &connectors.FakeConnector{Flag: connectors.NoError},
-			expected: profilingRun{
-				Type:       crioRun,
+			expected: runs.ProfilingRun{
+				Type:       runs.CrioRun,
 				Successful: true,
 				Error:      "",
 			},
@@ -25,8 +26,8 @@ func TestProfileCrio(t *testing.T) {
 		{
 			name:      "Network error on curl, ProfilingRun contains error",
 			connector: &connectors.FakeConnector{Flag: connectors.SocketErr},
-			expected: profilingRun{
-				Type:       crioRun,
+			expected: runs.ProfilingRun{
+				Type:       runs.CrioRun,
 				Successful: false,
 				Error:      fmt.Sprintf("error running CRIO profiling :\n%s", "curl: (7) Couldn't connect to server"),
 			},
@@ -34,8 +35,8 @@ func TestProfileCrio(t *testing.T) {
 		{
 			name:      "IO error at storing result, ProfilingRun contains error",
 			connector: &connectors.FakeConnector{Flag: connectors.WriteErr},
-			expected: profilingRun{
-				Type:       crioRun,
+			expected: runs.ProfilingRun{
+				Type:       runs.CrioRun,
 				Successful: false,
 				Error:      fmt.Sprintf("error running CRIO profiling :\n%s", "curl: (23) Failure writing output to destination"),
 			},
@@ -50,8 +51,8 @@ func TestProfileCrio(t *testing.T) {
 			if tc.expected.Type != pr.Type {
 				t.Errorf("Expecting a ProfilingRun of type %s but was %s", tc.expected.Type, pr.Type)
 			}
-			if pr.BeginDate.After(pr.EndDate) {
-				t.Errorf("Expecting the registered beginDate %v to be before the profiling endDate %v but was not", pr.BeginDate, pr.EndDate)
+			if pr.BeginTime.After(pr.EndTime) {
+				t.Errorf("Expecting the registered beginDate %v to be before the profiling endDate %v but was not", pr.BeginTime, pr.EndTime)
 			}
 			if tc.expected.Successful != pr.Successful {
 				t.Errorf("Expecting ProfilingRun to be successful=%t but was %t", tc.expected.Successful, pr.Successful)

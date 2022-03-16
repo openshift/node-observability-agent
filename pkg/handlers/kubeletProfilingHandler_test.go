@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/openshift/node-observability-agent/pkg/runs"
 )
 
 // RoundTripFunc .
@@ -29,7 +31,7 @@ func TestProfileKubelet(t *testing.T) {
 		name     string
 		handlers *Handlers
 		client   *http.Client
-		expected profilingRun
+		expected runs.ProfilingRun
 	}{
 		{
 			name:     "KubeletProfiling passes, ProfileRun returned",
@@ -44,8 +46,8 @@ func TestProfileKubelet(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			expected: profilingRun{
-				Type:       kubeletRun,
+			expected: runs.ProfilingRun{
+				Type:       runs.KubeletRun,
 				Successful: true,
 				Error:      "",
 			},
@@ -63,8 +65,8 @@ func TestProfileKubelet(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			expected: profilingRun{
-				Type:       kubeletRun,
+			expected: runs.ProfilingRun{
+				Type:       runs.KubeletRun,
 				Successful: false,
 				Error:      fmt.Sprintf("error with HTTP request for kubelet profiling https://%s:10250/debug/pprof/profile: statusCode %d", "127.0.0.1", http.StatusUnauthorized),
 			},
@@ -82,8 +84,8 @@ func TestProfileKubelet(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			expected: profilingRun{
-				Type:       kubeletRun,
+			expected: runs.ProfilingRun{
+				Type:       runs.KubeletRun,
 				Successful: false,
 				Error:      fmt.Sprintf("error creating file to save result of kubelet profiling for node %s", "127.0.0.1"),
 			},
@@ -95,8 +97,8 @@ func TestProfileKubelet(t *testing.T) {
 			if tc.expected.Type != pr.Type {
 				t.Errorf("Expecting a ProfilingRun of type %s but was %s", tc.expected.Type, pr.Type)
 			}
-			if pr.BeginDate.After(pr.EndDate) {
-				t.Errorf("Expecting the registered beginDate %v to be before the profiling endDate %v but was not", pr.BeginDate, pr.EndDate)
+			if pr.BeginTime.After(pr.EndTime) {
+				t.Errorf("Expecting the registered beginDate %v to be before the profiling endDate %v but was not", pr.BeginTime, pr.EndTime)
 			}
 			if tc.expected.Successful != pr.Successful {
 				t.Errorf("Expecting ProfilingRun to be successful=%t but was %t", tc.expected.Successful, pr.Successful)
