@@ -34,6 +34,9 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Gosec G304 (CWE-22) - Mitigated
+	// This is a parameter passed via a command line. The agent only takes the token file from this parameter
+	// and cannot be changed as it is not exposed via an environmental variable , configmap or secret
 	lvl, err := log.ParseLevel(*logLevel)
 	if err != nil {
 		log.Errorf("Log level %s not recognized, using info", *logLevel)

@@ -43,20 +43,28 @@ func (h *Handlers) profileKubelet(uid string, client *http.Client) runs.Profilin
 	}
 
 	defer res.Body.Close()
-	out, err := os.Create(filepath.Join(h.StorageFolder, "kubelet-"+uid+".pprof"))
-	if err != nil {
+	errFile := h.fileHandler(uid, &res.Body)
+	if errFile != nil {
 		run.EndTime = time.Now()
-		run.Error = fmt.Sprintf("error creating file to save result of kubelet profiling for node %s: %s", h.NodeIP, err)
+		run.Error = fmt.Sprintf("error fileHandler - kubelet profiling for node %s: %s", h.NodeIP, errFile)
 		return run
 	}
-	defer out.Close()
-	_, err = io.Copy(out, res.Body)
-	if err != nil {
-		run.EndTime = time.Now()
-		run.Error = fmt.Sprintf("error saving result of kubelet profiling for node %s: %v", h.NodeIP, err)
-		return run
-	}
+
 	run.EndTime = time.Now()
 	run.Successful = true
 	return run
+}
+
+// G307 (CWE-703) - Mitigated
+// Deferring unsafe method "Close" on type "*os.File"
+func (h *Handlers) fileHandler(uid string, body *io.ReadCloser) error {
+	out, err := os.Create(filepath.Join(h.StorageFolder, "kubelet-"+uid+".pprof"))
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(out, *body)
+	if err != nil {
+		return err
+	}
+	return out.Close()
 }

@@ -122,12 +122,14 @@ func (m *StateLock) readUIDFromFile() (uuid.UUID, error) {
 	return arun.ID, nil
 }
 
+// G306 (CWE-276) - Mitigated
+// Changed permissions from 0644 to 0600
 func (m *StateLock) writeRunToErrorFile(arun runs.Run) error {
 	bytes, err := json.Marshal(arun)
 	if err != nil {
 		return fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%w", string(m.errorFilePath), arun.ID.String(), err)
 	}
-	err = os.WriteFile(m.errorFilePath, bytes, 0644)
+	err = os.WriteFile(m.errorFilePath, bytes, 0600)
 	if err != nil {
 		return fmt.Errorf("error writing  %s file: %w", m.errorFilePath, err)
 	}
