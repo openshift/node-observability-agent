@@ -1,0 +1,731 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>node-observability-agent: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/openshift/node-observability-agent/cmd/node-observability-agent/main.go (48.4%)</option>
+				
+				<option value="file1">github.com/openshift/node-observability-agent/pkg/handlers/crioProfilingHandler.go (100.0%)</option>
+				
+				<option value="file2">github.com/openshift/node-observability-agent/pkg/handlers/handlers.go (78.6%)</option>
+				
+				<option value="file3">github.com/openshift/node-observability-agent/pkg/handlers/kubeletProfilingHandler.go (78.1%)</option>
+				
+				<option value="file4">github.com/openshift/node-observability-agent/pkg/statelocker/statelocker.go (89.8%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package main
+
+import (
+        "flag"
+        "fmt"
+        "io/ioutil"
+        "net"
+        "os"
+        "syscall"
+
+        log "github.com/sirupsen/logrus"
+
+        "github.com/openshift/node-observability-agent/pkg/server"
+)
+
+var (
+        version       = "unknown"
+        app           = "node-observability-agent"
+        node          = os.Getenv("NODE_IP")
+        port          = flag.Int("port", 9000, "server port to listen on (default: 9000)")
+        storageFolder = flag.String("storage", "/tmp/pprofs/", "folder to which the pprof files are saved")
+        tokenFile     = flag.String("tokenFile", "", "file containing token to be used for kubelet profiling http request")
+        crioSocket    = flag.String("crioUnixSocket", "/var/run/crio/crio.sock", "file referring to the unix socket to be used for CRIO profiling")
+        logLevel      = flag.String("loglevel", "info", "log level")
+        versionFlag   = flag.Bool("v", false, "print version")
+        appVersion    = fmt.Sprintf("%s %s", app, version)
+)
+
+func main() <span class="cov0" title="0">{
+        flag.Parse()
+
+        if *versionFlag </span><span class="cov0" title="0">{
+                fmt.Println(appVersion)
+                os.Exit(0)
+        }</span>
+
+        // Gosec G304 (CWE-22) - Mitigated
+        // This is a parameter passed via a command line. The agent only takes the token file from this parameter
+        // and cannot be changed as it is not exposed via an enviromental variable , configmap or secret
+
+        <span class="cov0" title="0">lvl, err := log.ParseLevel(*logLevel)
+        if err != nil </span><span class="cov0" title="0">{
+                log.Errorf("Log level %s not recognized, using info", *logLevel)
+                *logLevel = "info"
+                lvl = log.InfoLevel
+        }</span>
+        <span class="cov0" title="0">log.SetLevel(lvl)
+        log.Infof("Starting %s at log level %s", appVersion, *logLevel)
+
+        checkParameters(*tokenFile, node, *storageFolder, *crioSocket)
+
+        token, err := readTokenFile(*tokenFile)
+        if err != nil </span><span class="cov0" title="0">{
+                panic("Unable to read token file, or token is empty :" + err.Error())</span>
+        }
+
+        <span class="cov0" title="0">server.Start(server.Config{
+                Port:           *port,
+                Token:          token,
+                StorageFolder:  *storageFolder,
+                CrioUnixSocket: *crioSocket,
+                NodeIP:         node,
+        })</span>
+}
+
+func checkParameters(tokenFile string, nodeIP string, storageFolder string, crioUnixSocket string) <span class="cov8" title="1">{
+        //check on configs that are passed along before starting up the server
+        //1. token is readable
+        _, err := readTokenFile(tokenFile)
+        if err != nil </span><span class="cov8" title="1">{
+                panic("Unable to read token file")</span>
+        }
+        //2. nodeIP is found
+        <span class="cov8" title="1">if nodeIP == "" || net.ParseIP(nodeIP) == nil </span><span class="cov8" title="1">{
+                panic("Environment variable NODE_IP not found, or doesnt contain a valid IP address")</span>
+        }
+        //3. StorageFolder is accessible in readwrite
+        <span class="cov8" title="1">if syscall.Access(storageFolder, syscall.O_RDWR) != nil </span><span class="cov8" title="1">{
+                panic("Unable to access the folder specified for saving the profiling data - no write permission :" + storageFolder)</span>
+        }
+        //4. CRIO socket is accessible in readwrite
+        <span class="cov8" title="1">if syscall.Access(crioUnixSocket, syscall.O_RDWR) != nil </span><span class="cov8" title="1">{
+                panic("Unable to access the the crio socket - no write permission :" + crioUnixSocket)</span>
+        }
+}
+
+func readTokenFile(tokenFile string) (string, error) <span class="cov8" title="1">{
+        content, err := ioutil.ReadFile(tokenFile)
+        if err != nil </span><span class="cov8" title="1">{
+                return "", err
+        }</span>
+        <span class="cov8" title="1">if len(content) &lt;= 0 </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("%s was empty", tokenFile)
+        }</span>
+        <span class="cov8" title="1">return string(content), nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package handlers
+
+import (
+        "fmt"
+        "time"
+
+        "github.com/openshift/node-observability-agent/pkg/connectors"
+        "github.com/openshift/node-observability-agent/pkg/runs"
+)
+
+// ProfileCrio calls /debug/pprof/profile on the h.NodeIP, through the unix socket,
+// thus triggering a CRIO profiling on that node.
+// This call requires access to the host socket, which is passed to the agent in parameter crioSocket
+func (h *Handlers) profileCrio(uid string, cmd connectors.CmdWrapper) runs.ProfilingRun <span class="cov8" title="1">{
+        //curl --unix-socket /var/run/crio/crio.sock http://localhost/debug/pprof/profile &gt; /mnt/prof.out
+
+        run := runs.ProfilingRun{
+                Type:      runs.CrioRun,
+                BeginTime: time.Now(),
+        }
+
+        message, err := cmd.CmdExec()
+        run.EndTime = time.Now()
+        if err != nil </span><span class="cov8" title="1">{
+                run.Error = fmt.Sprintf("error running CRIO profiling :\n%s", message)
+        }</span> else<span class="cov8" title="1"> {
+                run.Successful = true
+                hlog.Infof("CRIO profiling successful, %s", message)
+        }</span>
+        <span class="cov8" title="1">return run</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package handlers
+
+import (
+        "bytes"
+        "crypto/tls"
+        "encoding/json"
+        "fmt"
+        "net/http"
+        "os"
+        "path/filepath"
+        "time"
+
+        "github.com/google/uuid"
+        "github.com/sirupsen/logrus"
+
+        "github.com/openshift/node-observability-agent/pkg/connectors"
+        "github.com/openshift/node-observability-agent/pkg/runs"
+        "github.com/openshift/node-observability-agent/pkg/statelocker"
+)
+
+var hlog = logrus.WithField("module", "handler")
+
+// Handlers holds the parameters necessary for running the CRIO and Kubelet profiling
+type Handlers struct {
+        Token          string
+        NodeIP         string
+        StorageFolder  string
+        CrioUnixSocket string
+        // mux            *sync.Mutex
+        // onGoingRunID   string
+        stateLocker statelocker.StateLocker
+}
+
+type fileType string
+
+// NewHandlers creates a new instance of Handlers from the given parameters
+func NewHandlers(token string, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers <span class="cov8" title="1">{
+        aStateLocker := statelocker.NewStateLock(filepath.Join(storageFolder, "agent."+string(errorFile)))
+        return &amp;Handlers{
+                Token:          token,
+                NodeIP:         nodeIP,
+                StorageFolder:  storageFolder,
+                CrioUnixSocket: crioUnixSocket,
+                stateLocker:    aStateLocker,
+        }
+}</span>
+
+const (
+        ready                   = "Service is ready"
+        httpRespErrMsg          = "unable to send response"
+        timeout        int      = 35
+        logFile        fileType = "log"
+        errorFile      fileType = "err"
+)
+
+// Status is called when the agent receives an HTTP request on endpoint /status.
+// It returns:
+// * HTTP 500 if the agent is in error,
+// * HTTP 409 if a previous profiling is still ongoing,
+// * HTTP 200 if the agent is ready
+func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        id, state, err := h.stateLocker.LockInfo()
+        if err != nil </span><span class="cov8" title="1">{
+                http.Error(w, "error retrieving service status",
+                        http.StatusInternalServerError)
+                hlog.Errorf("Error retrieving service status : %v", err)
+                return
+        }</span>
+        <span class="cov8" title="1">switch state </span>{
+        case statelocker.InError:<span class="cov8" title="1">
+                err = respondBusyOrError(id.String(), w, true)
+                if err != nil </span><span class="cov0" title="0">{
+                        http.Error(w, httpRespErrMsg,
+                                http.StatusInternalServerError)
+                        hlog.Error(httpRespErrMsg)
+                        return
+                }</span>
+        case statelocker.Taken:<span class="cov8" title="1">
+                err := respondBusyOrError(id.String(), w, false)
+                if err != nil </span><span class="cov0" title="0">{
+                        http.Error(w, httpRespErrMsg,
+                                http.StatusInternalServerError)
+                        hlog.Error(httpRespErrMsg)
+                        return
+                }</span>
+        case statelocker.Free:<span class="cov8" title="1">
+                _, err := w.Write([]byte(ready))
+                if err != nil </span><span class="cov0" title="0">{
+                        hlog.Errorf("could not send response busy : %v", err)
+                }</span>
+        }
+}
+
+func sendUID(w http.ResponseWriter, runID uuid.UUID) error <span class="cov8" title="1">{
+        response := runs.Run{
+                ID: runID,
+        }
+
+        jsResponse, err := json.Marshal(response)
+        if err != nil </span><span class="cov0" title="0">{
+                http.Error(w, err.Error(), http.StatusInternalServerError)
+                return err
+        }</span>
+
+        <span class="cov8" title="1">w.Header().Set("Content-Type", "application/json")
+        _, err = w.Write(jsResponse)
+        if err != nil </span><span class="cov0" title="0">{
+                hlog.Errorf("Unable to send HTTP response : %v", err)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func respondBusyOrError(uid string, w http.ResponseWriter, isError bool) error <span class="cov8" title="1">{
+
+        message := ""
+
+        if isError </span><span class="cov8" title="1">{
+                w.WriteHeader(http.StatusInternalServerError)
+                message = uid + " failed."
+        }</span> else<span class="cov8" title="1"> {
+                w.WriteHeader(http.StatusConflict)
+                message = uid + " still running"
+        }</span>
+        <span class="cov8" title="1">_, err := w.Write([]byte(message))
+        if err != nil </span><span class="cov0" title="0">{
+                hlog.Errorf("Unable to send HTTP response : %v", err)
+                return err
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// HandleProfiling is called when the agent receives an HTTP request on endpoint /pprof
+// After checking the agent is not in error, and that no previous profiling is still ongoing,
+// it triggers the kubelet and CRIO profiling in separate goroutines, and launches a separate
+// function to process the results in a goroutine as well
+func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        uid, state, err := h.stateLocker.Lock()
+        if err != nil </span><span class="cov8" title="1">{
+                http.Error(w, "service is either busy or in error, try again",
+                        http.StatusInternalServerError)
+                hlog.Error(err)
+                return
+        }</span>
+
+        <span class="cov8" title="1">switch state </span>{
+        case statelocker.InError:<span class="cov8" title="1">
+                </span><span class="cov8" title="1">{
+                        err := respondBusyOrError(uid.String(), w, true)
+                        if err != nil </span><span class="cov0" title="0">{
+                                http.Error(w, httpRespErrMsg,
+                                        http.StatusInternalServerError)
+                                hlog.Error(httpRespErrMsg)
+                                return
+                        }</span>
+                        <span class="cov8" title="1">return</span>
+                }
+        case statelocker.Taken:<span class="cov8" title="1">
+                </span><span class="cov8" title="1">{
+                        err := respondBusyOrError(uid.String(), w, false)
+                        if err != nil </span><span class="cov0" title="0">{
+                                http.Error(w, httpRespErrMsg,
+                                        http.StatusInternalServerError)
+                                hlog.Error(httpRespErrMsg)
+                                return
+                        }</span>
+                        <span class="cov8" title="1">return</span>
+                }
+        case statelocker.Free:<span class="cov8" title="1">
+                </span><span class="cov8" title="1">{
+
+                        // Channel for collecting results of profiling
+                        runResultsChan := make(chan runs.ProfilingRun)
+
+                        // Launch both profilings in parallel as well as the routine to wait for results
+                        go func() </span><span class="cov8" title="1">{
+                                //TODO Go back to securely making this request
+                                //Prepare http client that ignores tls check
+                                transCfg := &amp;http.Transport{
+                                        TLSClientConfig: &amp;tls.Config{InsecureSkipVerify: true},
+                                }
+                                client := &amp;http.Client{Transport: transCfg}
+                                runResultsChan &lt;- h.profileKubelet(uid.String(), client)
+                        }</span>()
+
+                        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+                                connector := connectors.Connector{}
+                                connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", filepath.Join(h.StorageFolder, "crio-"+uid.String()+".pprof")})
+                                runResultsChan &lt;- h.profileCrio(uid.String(), &amp;connector)
+                        }</span>()
+
+                        <span class="cov8" title="1">go h.processResults(uid, runResultsChan)
+                        // Send a HTTP 200 straight away
+                        err := sendUID(w, uid)
+                        if err != nil </span><span class="cov0" title="0">{
+                                hlog.Error(err)
+                                return
+                        }</span>
+                }
+        }
+
+}
+func (h *Handlers) processResults(uid uuid.UUID, runResultsChan chan runs.ProfilingRun) <span class="cov8" title="1">{
+        arun := runs.Run{
+                ID:            uid,
+                ProfilingRuns: []runs.ProfilingRun{},
+        }
+        // unlock as soon as finished processing
+        defer func() </span><span class="cov8" title="1">{
+                err := h.stateLocker.Unlock()
+                if err != nil </span><span class="cov0" title="0">{
+                        hlog.Fatal(err)
+                }</span>
+                <span class="cov8" title="1">close(runResultsChan)</span>
+        }()
+        // wait for the results
+        <span class="cov8" title="1">arun.ProfilingRuns = []runs.ProfilingRun{}
+        isTimeout := false
+        for nb := 0; nb &lt; 2 &amp;&amp; !isTimeout; </span><span class="cov8" title="1">{
+                select </span>{
+                case pr := &lt;-runResultsChan:<span class="cov8" title="1">
+                        nb++
+                        arun.ProfilingRuns = append(arun.ProfilingRuns, pr)</span>
+                case &lt;-time.After(time.Second * time.Duration(timeout)):<span class="cov8" title="1">
+                        //timeout! dont wait anymore
+                        prInTimeout := runs.ProfilingRun{
+                                Type:       runs.UnknownRun,
+                                Successful: false,
+                                BeginTime:  time.Now(),
+                                EndTime:    time.Now(),
+                                Error:      fmt.Sprintf("timeout after waiting %ds", timeout),
+                        }
+                        prInTimeout.Error = fmt.Sprintf("timeout after waiting %ds", timeout)
+                        arun.ProfilingRuns = append(arun.ProfilingRuns, prInTimeout)
+                        isTimeout = true</span>
+                }
+        }
+
+        // Process the results
+        <span class="cov8" title="1">var errorMessage bytes.Buffer
+        var logMessage bytes.Buffer
+        for _, profRun := range arun.ProfilingRuns </span><span class="cov8" title="1">{
+                if profRun.Error != "" </span><span class="cov8" title="1">{
+                        errorMessage.WriteString("errors encountered while running " + string(profRun.Type) + ":\n")
+                        errorMessage.WriteString(profRun.Error + "\n")
+                }</span>
+                <span class="cov8" title="1">logMessage.WriteString(string(profRun.Type) + " - " + arun.ID.String() + ": " + profRun.BeginTime.String() + " -&gt; " + profRun.EndTime.String() + "\n")</span>
+        }
+
+        <span class="cov8" title="1">if errorMessage.Len() &gt; 0 </span><span class="cov8" title="1">{
+                hlog.Error(errorMessage.String())
+                err := h.stateLocker.SetError(arun)
+                if err != nil </span><span class="cov0" title="0">{
+                        hlog.Fatal(err)
+                }</span>
+        } else<span class="cov8" title="1"> {
+                // no errors : simply log the results
+                hlog.Info(logMessage.String())
+                _, err := writeRunToLogFile(arun, h.StorageFolder)
+                if err != nil </span><span class="cov0" title="0">{
+                        hlog.Fatal(err)
+                }</span>
+        }
+}
+
+func writeRunToLogFile(arun runs.Run, storageFolder string) (string, error) <span class="cov8" title="1">{
+
+        fileName := filepath.Join(storageFolder, arun.ID.String()+"."+string(logFile))
+
+        bytes, err := json.Marshal(arun)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%w", string(logFile), arun.ID.String(), err)
+        }</span>
+        <span class="cov8" title="1">err = os.WriteFile(fileName, bytes, 0644)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("error writing  %s file: %w", fileName, err)
+        }</span>
+        <span class="cov8" title="1">return fileName, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package handlers
+
+import (
+        "fmt"
+        "io"
+        "net/http"
+        "os"
+        "path/filepath"
+        "time"
+
+        "github.com/openshift/node-observability-agent/pkg/runs"
+)
+
+// ProfileKubelet calls /debug/pprof/profile on the h.NodeIP, thus triggering a kubelet
+// profiling on that node.
+// This call requires an Authorization header, to which the h.Token is passed as Bearer token
+func (h *Handlers) profileKubelet(uid string, client *http.Client) runs.ProfilingRun <span class="cov8" title="1">{
+        run := runs.ProfilingRun{
+                Type:      runs.KubeletRun,
+                BeginTime: time.Now(),
+        }
+
+        //Construct HTTP Req
+        req, err := http.NewRequest("GET", "https://"+h.NodeIP+":10250/debug/pprof/profile", nil)
+        req.Header.Add("Authorization", "Bearer "+h.Token)
+        if err != nil </span><span class="cov0" title="0">{
+                run.EndTime = time.Now()
+                run.Error = fmt.Sprintf("error preparing http request https://%s:10250/debug/pprof/profile: %v", h.NodeIP, err)
+                return run
+        }</span>
+        //Handle HTTP Req
+        <span class="cov8" title="1">res, err := client.Do(req)
+        if err != nil </span><span class="cov0" title="0">{
+                run.EndTime = time.Now()
+                run.Error = fmt.Sprintf("error with HTTP request for kubelet profiling https://%s:10250/debug/pprof/profile: %v", h.NodeIP, err)
+                return run
+        }</span>
+
+        <span class="cov8" title="1">if res.StatusCode != http.StatusOK </span><span class="cov8" title="1">{
+                run.EndTime = time.Now()
+                run.Error = fmt.Sprintf("error with HTTP request for kubelet profiling https://%s:10250/debug/pprof/profile: statusCode %d", h.NodeIP, res.StatusCode)
+                return run
+        }</span>
+
+        <span class="cov8" title="1">defer res.Body.Close()
+        errFile := h.fileHandler(uid, &amp;res.Body)
+        if errFile != nil </span><span class="cov8" title="1">{
+                run.EndTime = time.Now()
+                run.Error = fmt.Sprintf("error fileHandler - kubelet profiling for node %s: %s", h.NodeIP, errFile)
+                return run
+        }</span>
+
+        <span class="cov8" title="1">run.EndTime = time.Now()
+        run.Successful = true
+        return run</span>
+}
+
+// G307 (CWE-703) - Mitigated
+// Deferring unsafe method "Close" on type "*os.File"
+func (h *Handlers) fileHandler(uid string, body *io.ReadCloser) error <span class="cov8" title="1">{
+        out, err := os.Create(filepath.Join(h.StorageFolder, "kubelet-"+uid+".pprof"))
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+        <span class="cov8" title="1">_, err = io.Copy(out, *body)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">return out.Close()</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package statelocker
+
+import (
+        "encoding/json"
+        "fmt"
+        "io/ioutil"
+        "os"
+        "sync"
+
+        "github.com/google/uuid"
+
+        "github.com/openshift/node-observability-agent/pkg/runs"
+)
+
+type State string
+
+const (
+        Free    State = "FREE"
+        Taken   State = "TAKEN"
+        InError State = "ERROR"
+)
+
+type StateLocker interface {
+        Lock() (uuid.UUID, State, error)
+        SetError(runInError runs.Run) error
+        Unlock() error
+        LockInfo() (uuid.UUID, State, error)
+}
+
+// StateLock struct holds the state of the agent service
+// and ensures its update in racy conditions
+type StateLock struct {
+        mux           *sync.Mutex
+        takerID       uuid.UUID
+        errorFilePath string
+}
+
+// NewStateLock creates a mutex for syncing the agent service state
+// the pathToErr parameter is the path to the error file which might
+// be created in case a profiling request is in error.
+func NewStateLock(pathToErr string) *StateLock <span class="cov8" title="1">{
+        return &amp;StateLock{
+                mux:           &amp;sync.Mutex{},
+                errorFilePath: pathToErr,
+                takerID:       uuid.Nil,
+        }
+}</span>
+
+// StateLock attempts to take the single token available
+// The first return param is the UID of the job holding the lock
+// According to the value of the second return param (state), this
+// uuid is either a newly created UUID, or the one from the ongoing job
+// The second return parameter is the State: Free is returned in case of success, Taken is returned in case
+// a previous job is still running, InError is returned in case the errorFile exists
+// The last parameter returned is the error encountered, if any
+func (m *StateLock) Lock() (uuid.UUID, State, error) <span class="cov8" title="1">{
+        m.mux.Lock()
+        defer m.mux.Unlock()
+        if m.takerID != uuid.Nil </span><span class="cov8" title="1">{
+                return m.takerID, Taken, nil
+        }</span>
+        <span class="cov8" title="1">if m.errorFileExists() </span><span class="cov8" title="1">{
+                uid, err := m.readUIDFromFile()
+                if err != nil </span><span class="cov8" title="1">{
+                        return uuid.Nil, InError, err
+                }</span>
+                <span class="cov8" title="1">return uid, InError, nil</span>
+        }
+        <span class="cov8" title="1">m.takerID = uuid.New()
+        return m.takerID, Free, nil</span>
+}
+
+func (m *StateLock) SetError(runInError runs.Run) error <span class="cov8" title="1">{
+        m.mux.Lock()
+        defer m.mux.Unlock()
+        if runInError.ID != uuid.Nil </span><span class="cov8" title="1">{
+                return m.writeRunToErrorFile(runInError)
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (m *StateLock) Unlock() error <span class="cov8" title="1">{
+        m.mux.Lock()
+        defer m.mux.Unlock()
+        m.takerID = uuid.Nil
+        return nil
+}</span>
+
+func (m *StateLock) LockInfo() (uuid.UUID, State, error) <span class="cov8" title="1">{
+        m.mux.Lock()
+        defer m.mux.Unlock()
+        if m.errorFileExists() </span><span class="cov8" title="1">{
+                uid, err := m.readUIDFromFile()
+                if err != nil </span><span class="cov0" title="0">{
+                        return uuid.Nil, InError, err
+                }</span>
+                <span class="cov8" title="1">return uid, InError, nil</span>
+        }
+        <span class="cov8" title="1">if m.takerID != uuid.Nil </span><span class="cov8" title="1">{
+                return m.takerID, Taken, nil
+        }</span>
+        <span class="cov8" title="1">return m.takerID, Free, nil</span>
+}
+
+func (m *StateLock) errorFileExists() bool <span class="cov8" title="1">{
+        if _, err := os.Stat(m.errorFilePath); err != nil </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        <span class="cov8" title="1">return true</span>
+}
+
+func (m *StateLock) readUIDFromFile() (uuid.UUID, error) <span class="cov8" title="1">{
+        var arun *runs.Run = &amp;runs.Run{}
+        contents, err := ioutil.ReadFile(m.errorFilePath)
+        if err != nil </span><span class="cov0" title="0">{
+                return uuid.Nil, err
+        }</span>
+        <span class="cov8" title="1">err = json.Unmarshal(contents, arun)
+        if err != nil </span><span class="cov8" title="1">{
+                return uuid.Nil, err
+        }</span>
+        <span class="cov8" title="1">return arun.ID, nil</span>
+}
+
+// G306 (CWE-276) - Mitigated
+// Changed permissions from 0644 to 0600
+func (m *StateLock) writeRunToErrorFile(arun runs.Run) error <span class="cov8" title="1">{
+        bytes, err := json.Marshal(arun)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%w", string(m.errorFilePath), arun.ID.String(), err)
+        }</span>
+        <span class="cov8" title="1">err = os.WriteFile(m.errorFilePath, bytes, 0600)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("error writing  %s file: %w", m.errorFilePath, err)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
