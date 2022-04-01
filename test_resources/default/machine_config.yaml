@@ -15,3 +15,4 @@ spec:
             [Service]
             Environment="ENABLE_PROFILE_UNIX_SOCKET=true"
           name: 10-mco-profile-unix-socket.conf
+        name: crio.service
