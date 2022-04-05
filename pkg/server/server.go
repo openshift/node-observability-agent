@@ -9,6 +9,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const loopback = "127.0.0.1"
+
 var slog = logrus.WithField("module", "server")
 
 // Config holds the parameters necessary for the HTTP server, and agent in general need to run
@@ -32,13 +34,13 @@ func Start(cfg Config) {
 
 	httpServer := &http.Server{
 		Handler:      router,
-		Addr:         fmt.Sprintf(":%d", cfg.Port),
+		Addr:         fmt.Sprintf("%s:%d", loopback, cfg.Port),
 		TLSConfig:    tlsConfig,
 		ReadTimeout:  40 * time.Second,
 		WriteTimeout: 40 * time.Second,
 	}
 
-	slog.Infof("listening on http://:%d", cfg.Port)
+	slog.Infof("listening on http://%s:%d", loopback, cfg.Port)
 	slog.Infof("targeting node %s", cfg.NodeIP)
 
 	panic(httpServer.ListenAndServe())
