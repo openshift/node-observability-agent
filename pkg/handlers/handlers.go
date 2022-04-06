@@ -270,7 +270,7 @@ func writeRunToLogFile(arun runs.Run, storageFolder string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%w", string(logFile), arun.ID.String(), err)
 	}
-	err = os.WriteFile(fileName, bytes, 0644)
+	err = os.WriteFile(fileName, bytes, 0600)
 	if err != nil {
 		return "", fmt.Errorf("error writing  %s file: %w", fileName, err)
 	}

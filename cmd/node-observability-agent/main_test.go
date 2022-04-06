@@ -15,13 +15,16 @@ type TestCase struct {
 }
 
 func TestReadTokenFile(t *testing.T) {
+	// #nosec G101 this is just a test file, cotaining random text
 	invalidTokenFile := "/tmp/noToken"
 	token := "abc"
+	// #nosec G101 this is just a test file, cotaining random text
 	validTokenFile := "/tmp/aToken"
-	err := os.WriteFile(validTokenFile, []byte(token), 0644)
+	err := os.WriteFile(validTokenFile, []byte(token), 0600)
 	if err != nil {
 		t.Error(err)
 	}
+	// #nosec G101 this is just an empty test file
 	emptyTokenFile := "/tmp/emptyToken"
 	_, err = os.Create(emptyTokenFile)
 	if err != nil {
@@ -84,12 +87,15 @@ func TestReadTokenFile(t *testing.T) {
 	}
 }
 func TestCheckParameters(t *testing.T) {
+	// #nosec G101 this is just an empty test file
 	validTokenFile := "/tmp/aToken"
-	err := os.WriteFile(validTokenFile, []byte("abc"), 0644)
+	err := os.WriteFile(validTokenFile, []byte("abc"), 0600)
 	if err != nil {
 		t.Error(err)
 	}
+	// #nosec G101 this is just an empty test file
 	invalidTokenFile := "/tmp/noToken"
+	// #nosec G101 this is just an empty test file
 	unReadableTokenFile := "/tmp/noReadToken"
 	_, err = os.Create(unReadableTokenFile)
 	if err != nil {

@@ -82,7 +82,7 @@ func TestStatus(t *testing.T) {
 			if tc.isError {
 				// prepare an error file
 				errorFile := "/tmp/agent.err"
-				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0644)
+				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0600)
 				if err != nil {
 					t.Error(err)
 				}
@@ -215,7 +215,7 @@ func TestHandleProfiling(t *testing.T) {
 			if tc.serverState == "error" {
 				// prepare an error file
 				errorFile := "/tmp/agent.err"
-				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0644)
+				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0600)
 				if err != nil {
 					t.Error(err)
 				}

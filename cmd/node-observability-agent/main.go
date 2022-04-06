@@ -48,6 +48,12 @@ func main() {
 
 	checkParameters(*tokenFile, node, *storageFolder, *crioSocket)
 
+	/* #nosec G304 tokenFile is a parameter of the agent’s go program.
+	*  Upon creation of the NodeObservability CR, the operator creates a SA for the agent, sets its RBAC,
+	* and provides the tokenFile parameter in the daemonset manifest: The value provided is the default file
+	* kubernetes mounts on the node containing the SA JWT)
+	* The agent only takes the token file from that
+	 */
 	token, err := readTokenFile(*tokenFile)
 	if err != nil {
 		panic("Unable to read token file, or token is empty :" + err.Error())
