@@ -62,7 +62,7 @@ func TestStatus(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := httptest.NewRequest("GET", "http://localhost/status", nil)
+			r := httptest.NewRequest("GET", "http://localhost/node-observability-status", nil)
 			w := httptest.NewRecorder()
 			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 			var cur uuid.UUID
@@ -198,7 +198,7 @@ func TestHandleProfiling(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
-			r := httptest.NewRequest("GET", "http://localhost/status", nil)
+			r := httptest.NewRequest("GET", "http://localhost/node-observability-status", nil)
 			w := httptest.NewRecorder()
 			if tc.serverState == "busy" {
 				_, _, err := h.stateLocker.Lock()

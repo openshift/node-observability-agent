@@ -10,7 +10,7 @@ func setupRoutes(cfg Config) *mux.Router {
 
 	h := handlers.NewHandlers(cfg.Token, cfg.StorageFolder, cfg.CrioUnixSocket, cfg.NodeIP)
 	r := mux.NewRouter()
-	r.HandleFunc("/pprof", h.HandleProfiling)
-	r.HandleFunc("/status", h.Status)
+	r.HandleFunc("/node-observability-pprof", h.HandleProfiling)
+	r.HandleFunc("/node-observability-status", h.Status)
 	return r
 }
