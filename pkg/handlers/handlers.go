@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -26,6 +27,7 @@ type Handlers struct {
 	NodeIP         string
 	StorageFolder  string
 	CrioUnixSocket string
+	CACerts        []byte
 	// mux            *sync.Mutex
 	// onGoingRunID   string
 	stateLocker statelocker.StateLocker
@@ -34,10 +36,11 @@ type Handlers struct {
 type fileType string
 
 // NewHandlers creates a new instance of Handlers from the given parameters
-func NewHandlers(token string, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers {
+func NewHandlers(token string, caCerts []byte, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers {
 	aStateLocker := statelocker.NewStateLock(filepath.Join(storageFolder, "agent."+string(errorFile)))
 	return &Handlers{
 		Token:          token,
+		CACerts:        caCerts,
 		NodeIP:         nodeIP,
 		StorageFolder:  storageFolder,
 		CrioUnixSocket: crioUnixSocket,
@@ -173,12 +176,22 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 
 			// Launch both profilings in parallel as well as the routine to wait for results
 			go func() {
-				//TODO Go back to securely making this request
-				//Prepare http client that ignores tls check
-				transCfg := &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+
+				caCertPool := x509.NewCertPool()
+				if !caCertPool.AppendCertsFromPEM(h.CACerts) {
+					hlog.Errorf("Unable to add certificates into caCertPool:\n%v", err)
+					return
 				}
+				hlog.Infof("caCertPool contains %v", caCertPool.Subjects())
+				transCfg := &http.Transport{
+					TLSClientConfig: &tls.Config{
+						RootCAs:    caCertPool,
+						MinVersion: tls.VersionTLS12,
+					},
+				}
+				hlog.Info("caCertPool loaded in TCP Config")
 				client := &http.Client{Transport: transCfg}
+				hlog.Info("TCP config loaded in client")
 				runResultsChan <- h.profileKubelet(uid.String(), client)
 			}()
 

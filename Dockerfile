@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi8/go-toolset:1.16.12-4 as builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.17-openshift-4.10 AS builder
 ARG VERSION="1.17"
 
 WORKDIR /opt/app-root
@@ -10,4 +10,4 @@ FROM registry.access.redhat.com/ubi8/ubi-minimal:8.5
 
 COPY --from=builder /opt/app-root/node-observability-agent ./
 
-ENTRYPOINT ["sh", "-c", "./node-observability-agent --tokenFile /var/run/secrets/kubernetes.io/serviceaccount/token --storage /host/tmp/pprofs/ --node $NODE_IP"]
+ENTRYPOINT ["sh", "-c", "./node-observability-agent --tokenFile /var/run/secrets/kubernetes.io/serviceaccount/token --caCertFile /var/run/secrets/kubernetes.io/serviceaccount/kubelet-serving-ca.crt --storage /host/tmp/pprofs/ --node $NODE_IP"]

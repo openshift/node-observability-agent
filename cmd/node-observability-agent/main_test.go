@@ -8,12 +8,85 @@ import (
 type TestCase struct {
 	name          string
 	tokenFile     string
+	caCertFile    string
 	nodeIP        string
 	storageFolder string
 	crioSocket    string
 	expectPanic   bool
 }
 
+func TestReadCACertsFile(t *testing.T) {
+	// #nosec G101 this is just a test file, cotaining random text
+	invalidCACertFile := "/tmp/noCert"
+	cert := "A Fake Cert Content"
+	// #nosec G101 this is just a test file, cotaining random text
+	validCACertFile := "/tmp/aCA"
+	err := os.WriteFile(validCACertFile, []byte(cert), 0400)
+	if err != nil {
+		t.Error(err)
+	}
+	// #nosec G101 this is just an empty test file
+	emptyCAFile := "/tmp/emptyCA"
+	_, err = os.Create(emptyCAFile)
+	if err != nil {
+		t.Error(err)
+	}
+
+	defer func() {
+		if os.Remove(validCACertFile) != nil {
+			t.Error(err)
+		}
+	}()
+	defer func() {
+		if os.Remove(emptyCAFile) != nil {
+			t.Error(err)
+		}
+	}()
+
+	testCases := []struct {
+		name          string
+		caCertFile    string
+		expectedCert  []byte
+		expectedError bool
+	}{
+		{
+			name:          "CACertFile readeable, no errors",
+			caCertFile:    validCACertFile,
+			expectedCert:  []byte(cert),
+			expectedError: false,
+		},
+		{
+			name:          "CACertFile file not found, error",
+			caCertFile:    invalidCACertFile,
+			expectedCert:  make([]byte, 0),
+			expectedError: true,
+		},
+		{
+			name:          "CACertFile empty, error",
+			caCertFile:    emptyCAFile,
+			expectedCert:  make([]byte, 0),
+			expectedError: true,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cacert, err := readCACertsFile(tc.caCertFile)
+			if string(tc.expectedCert) != string(cacert) {
+				t.Errorf("expected returned CACert %s, but was %s", tc.expectedCert, cacert)
+			}
+			if tc.expectedError {
+				if err == nil {
+					t.Error("Expected error but didnt get any")
+
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Did not expect error but got %s", err.Error())
+				}
+			}
+		})
+	}
+}
 func TestReadTokenFile(t *testing.T) {
 	// #nosec G101 this is just a test file, cotaining random text
 	invalidTokenFile := "/tmp/noToken"
@@ -55,7 +128,7 @@ func TestReadTokenFile(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name:          "file not found, error",
+			name:          "token file not found, error",
 			tokenFile:     invalidTokenFile,
 			expectedToken: "",
 			expectedError: true,
@@ -161,10 +234,42 @@ func TestCheckParameters(t *testing.T) {
 	defer os.Remove(validStorageFolder)
 	defer os.Remove(unWriteableStorageFolder)
 
+	// #nosec G101 this is just a test file, cotaining random text
+	invalidCACertFile := "/tmp/noCert"
+	cert := "A Fake Cert Content"
+	// #nosec G101 this is just a test file, cotaining random text
+	validCACertFile := "/tmp/aCA"
+	err = os.WriteFile(validCACertFile, []byte(cert), 0400)
+	if err != nil {
+		t.Error(err)
+	}
+	// #nosec G101 this is just an empty test file
+	unReadableCAFile := "/tmp/unReadableCA"
+	_, err = os.Create(unReadableCAFile)
+	if err != nil {
+		t.Error(err)
+	}
+	err = os.Chmod(unReadableCAFile, 0100)
+	if err != nil {
+		t.Error(err)
+	}
+
+	defer func() {
+		if os.Remove(validCACertFile) != nil {
+			t.Error(err)
+		}
+	}()
+	defer func() {
+		if os.Remove(unReadableCAFile) != nil {
+			t.Error(err)
+		}
+	}()
+
 	testCases := []TestCase{
 		{
 			name:          "All params are OK, no errors",
 			tokenFile:     validTokenFile,
+			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: validStorageFolder,
 			crioSocket:    validSocket,
@@ -173,6 +278,7 @@ func TestCheckParameters(t *testing.T) {
 		{
 			name:          "Token file doesnt exist, error",
 			tokenFile:     invalidTokenFile,
+			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: validStorageFolder,
 			crioSocket:    validSocket,
@@ -181,17 +287,16 @@ func TestCheckParameters(t *testing.T) {
 		{
 			name:          "Token file is not readeable, error",
 			tokenFile:     unReadableTokenFile,
+			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: validStorageFolder,
 			crioSocket:    validSocket,
 			expectPanic:   true,
 		},
-		// {
-		// 	name: "Token file is empty, error",
-		// },
 		{
 			name:          "nodeIP is an invalid IP, error",
 			tokenFile:     validTokenFile,
+			caCertFile:    validCACertFile,
 			nodeIP:        " 1000.40.210.253",
 			storageFolder: validStorageFolder,
 			crioSocket:    validSocket,
@@ -200,6 +305,7 @@ func TestCheckParameters(t *testing.T) {
 		{
 			name:          "storageFolder doesnt exist, error",
 			tokenFile:     validTokenFile,
+			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: invalidStorageFolder,
 			crioSocket:    validSocket,
@@ -208,6 +314,7 @@ func TestCheckParameters(t *testing.T) {
 		{
 			name:          "storageFolder is not writable, error",
 			tokenFile:     validTokenFile,
+			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: unWriteableStorageFolder,
 			crioSocket:    validSocket,
@@ -216,6 +323,7 @@ func TestCheckParameters(t *testing.T) {
 		{
 			name:          "crio socket file doesnt exist, error",
 			tokenFile:     validTokenFile,
+			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: validStorageFolder,
 			crioSocket:    invalidSocket,
@@ -224,9 +332,28 @@ func TestCheckParameters(t *testing.T) {
 		{
 			name:          "crio socket file is not writable, error",
 			tokenFile:     validTokenFile,
+			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: validStorageFolder,
 			crioSocket:    unWriteableSocket,
+			expectPanic:   true,
+		},
+		{
+			name:          "CACert file doesnt exist, error",
+			tokenFile:     validTokenFile,
+			caCertFile:    invalidCACertFile,
+			nodeIP:        "127.0.0.1",
+			storageFolder: validStorageFolder,
+			crioSocket:    validSocket,
+			expectPanic:   true,
+		},
+		{
+			name:          "CACert file is not readeable, error",
+			tokenFile:     validTokenFile,
+			caCertFile:    unReadableCAFile,
+			nodeIP:        "127.0.0.1",
+			storageFolder: validStorageFolder,
+			crioSocket:    validSocket,
 			expectPanic:   true,
 		},
 	}
@@ -250,5 +377,5 @@ func checkPanic(t *testing.T, tc TestCase) {
 			}
 		}
 	}()
-	checkParameters(tc.tokenFile, tc.nodeIP, tc.storageFolder, tc.crioSocket)
+	checkParameters(tc.tokenFile, tc.nodeIP, tc.storageFolder, tc.crioSocket, tc.caCertFile)
 }

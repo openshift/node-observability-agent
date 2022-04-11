@@ -64,7 +64,7 @@ func TestStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest("GET", "http://localhost/node-observability-status", nil)
 			w := httptest.NewRecorder()
-			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+			h := NewHandlers("abc", []byte("fakeCert"), "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 			var cur uuid.UUID
 			if tc.isBusy {
 				c, _, err := h.stateLocker.Lock()
@@ -155,6 +155,10 @@ func TestSendUID(t *testing.T) {
 
 func TestHandleProfiling(t *testing.T) {
 
+	kubeletCA, err := ioutil.ReadFile("../../test_resources/kubelet-serving-ca.crt")
+	if err != nil {
+		panic("Unable to read CA for testing")
+	}
 	testCases := []struct {
 		name           string
 		serverState    string
@@ -197,7 +201,7 @@ func TestHandleProfiling(t *testing.T) {
 	for _, tc := range testCases {
 
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+			h := NewHandlers("abc", kubeletCA, "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 			r := httptest.NewRequest("GET", "http://localhost/node-observability-status", nil)
 			w := httptest.NewRecorder()
 			if tc.serverState == "busy" {
@@ -251,7 +255,7 @@ func TestHandleProfiling(t *testing.T) {
 }
 
 func TestProcessResults(t *testing.T) {
-	h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+	h := NewHandlers("abc", []byte("fakeCert"), "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 
 	crioRunOK := runs.ProfilingRun{
 		Type:       runs.CrioRun,

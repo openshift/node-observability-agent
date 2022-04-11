@@ -17,6 +17,7 @@ var slog = logrus.WithField("module", "server")
 type Config struct {
 	Port           int
 	Token          string
+	CACerts        []byte
 	NodeIP         string
 	StorageFolder  string
 	CrioUnixSocket string

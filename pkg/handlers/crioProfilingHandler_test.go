@@ -44,7 +44,7 @@ func TestProfileCrio(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+			h := NewHandlers("abc", []byte("fakeCert"), "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 			tc.connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", h.StorageFolder + "crio-1234.pprof"})
 
 			pr := h.profileCrio("1234", tc.connector)

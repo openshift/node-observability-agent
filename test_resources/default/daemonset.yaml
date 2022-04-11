@@ -28,6 +28,9 @@ spec:
         - mountPath: /var/run/crio/crio.sock
           name: socket
           readOnly: false
+        - mountPath: /etc/kubernetes/kubelet-ca.crt
+          name: certificate
+          readOnly: true
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
@@ -38,3 +41,7 @@ spec:
           path: /var/run/crio/crio.sock
           type: Socket
         name: socket
+      - hostPath:
+          path: /etc/kubernetes/kubelet-ca.crt
+          type: File
+        name: certificate
