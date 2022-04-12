@@ -15,16 +15,16 @@ type TestCase struct {
 	expectPanic   bool
 }
 
-func TestReadCACertsFile(t *testing.T) {
+func TestMakeCACertPool(t *testing.T) {
 	// #nosec G101 this is just a test file, cotaining random text
-	invalidCACertFile := "/tmp/noCert"
-	cert := "A Fake Cert Content"
-	// #nosec G101 this is just a test file, cotaining random text
-	validCACertFile := "/tmp/aCA"
-	err := os.WriteFile(validCACertFile, []byte(cert), 0400)
+	invalidCACertFile := "/tmp/notACert"
+	err := os.WriteFile(invalidCACertFile, []byte("not a cert"), 0600)
 	if err != nil {
 		t.Error(err)
 	}
+	// #nosec G101 this is just a test file, cotaining random text
+	validCACertFile := "../../test_resources/kubelet-serving-ca.crt"
+
 	// #nosec G101 this is just an empty test file
 	emptyCAFile := "/tmp/emptyCA"
 	_, err = os.Create(emptyCAFile)
@@ -33,7 +33,7 @@ func TestReadCACertsFile(t *testing.T) {
 	}
 
 	defer func() {
-		if os.Remove(validCACertFile) != nil {
+		if os.Remove(invalidCACertFile) != nil {
 			t.Error(err)
 		}
 	}()
@@ -46,34 +46,32 @@ func TestReadCACertsFile(t *testing.T) {
 	testCases := []struct {
 		name          string
 		caCertFile    string
-		expectedCert  []byte
 		expectedError bool
 	}{
 		{
 			name:          "CACertFile readeable, no errors",
 			caCertFile:    validCACertFile,
-			expectedCert:  []byte(cert),
 			expectedError: false,
 		},
 		{
 			name:          "CACertFile file not found, error",
-			caCertFile:    invalidCACertFile,
-			expectedCert:  make([]byte, 0),
+			caCertFile:    "/tmp/CertNotExist.crt",
 			expectedError: true,
 		},
 		{
 			name:          "CACertFile empty, error",
 			caCertFile:    emptyCAFile,
-			expectedCert:  make([]byte, 0),
+			expectedError: true,
+		},
+		{
+			name:          "CACertFile invalid content, error",
+			caCertFile:    invalidCACertFile,
 			expectedError: true,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			cacert, err := readCACertsFile(tc.caCertFile)
-			if string(tc.expectedCert) != string(cacert) {
-				t.Errorf("expected returned CACert %s, but was %s", tc.expectedCert, cacert)
-			}
+			cacert, err := makeCACertPool(tc.caCertFile)
 			if tc.expectedError {
 				if err == nil {
 					t.Error("Expected error but didnt get any")
@@ -82,6 +80,9 @@ func TestReadCACertsFile(t *testing.T) {
 			} else {
 				if err != nil {
 					t.Errorf("Did not expect error but got %s", err.Error())
+				}
+				if len(cacert.Subjects()) == 0 {
+					t.Error("cacert pool should contain at least one subject")
 				}
 			}
 		})

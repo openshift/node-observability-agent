@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"time"
@@ -17,7 +18,7 @@ var slog = logrus.WithField("module", "server")
 type Config struct {
 	Port           int
 	Token          string
-	CACerts        []byte
+	CACerts        *x509.CertPool
 	NodeIP         string
 	StorageFolder  string
 	CrioUnixSocket string

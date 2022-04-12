@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -60,7 +61,7 @@ func main() {
 		panic("Unable to read token file, or token is empty :" + err.Error())
 	}
 
-	caCerts, err := readCACertsFile(*caCertFile)
+	caCerts, err := makeCACertPool(*caCertFile)
 	if err != nil {
 		panic("Unable to read caCerts file :" + err.Error())
 	}
@@ -112,13 +113,19 @@ func readTokenFile(tokenFile string) (string, error) {
 	return string(content), nil
 }
 
-func readCACertsFile(caCertFile string) ([]byte, error) {
+func makeCACertPool(caCertFile string) (*x509.CertPool, error) {
+
 	content, err := ioutil.ReadFile(caCertFile)
 	if err != nil {
-		return content, err
+		return nil, err
 	}
 	if len(content) <= 0 {
-		err = fmt.Errorf("%s was empty", caCertFile)
+		return nil, fmt.Errorf("%s was empty", caCertFile)
 	}
-	return content, err
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(content) {
+		return nil, fmt.Errorf("Unable to add certificates into caCertPool:\n%v", err)
+
+	}
+	return caCertPool, nil
 }
