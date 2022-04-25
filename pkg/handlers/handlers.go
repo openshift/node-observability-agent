@@ -175,16 +175,10 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 			// Launch both profilings in parallel as well as the routine to wait for results
 			go func() {
 
-				transCfg := &http.Transport{
-					TLSClientConfig: &tls.Config{
-						RootCAs:                  h.CACerts,
-						MinVersion:               tls.VersionTLS12,
-						PreferServerCipherSuites: true,
-					},
-				}
-				hlog.Info("caCertPool loaded in TCP Config")
-				client := &http.Client{Transport: transCfg}
-				hlog.Info("TCP config loaded in client")
+				client := http.DefaultClient
+				client.Transport = http.DefaultTransport
+				client.Transport.(*http.Transport).TLSClientConfig = &tls.Config{RootCAs: h.CACerts, MinVersion: tls.VersionTLS12}
+				hlog.Info("caCertPool loaded in HTTP client Config")
 				runResultsChan <- h.profileKubelet(uid.String(), client)
 			}()
 
