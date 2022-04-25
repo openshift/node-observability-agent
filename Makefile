@@ -31,7 +31,7 @@ $(GOLANGCI_LINT_BIN):
 	hack/golangci-lint.sh $(GOLANGCI_LINT_BIN)
 	
 .PHONY: build.image
-build.image: build.go verify
+build.image:
 	$(CONTAINER_ENGINE) build -t ${IMG}:${IMAGE_TAG} .
 
 .PHONY: push.image.rhel8
