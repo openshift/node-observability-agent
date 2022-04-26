@@ -1,9 +1,7 @@
 GO=GO111MODULE=on GOFLAGS=-mod=vendor go
 GO_BUILD_BINDIR := bin
 GO_TEST_FLAGS :=-timeout=50s -tags=fake
-GO_PACKAGES=./pkg/... ./cmd/... ./tools/...
-
-GOLANGCI_LINT_BIN=$(GO_BUILD_BINDIR)/golangci-lint
+GO_PACKAGES=./pkg/... ./cmd/...
 
 ifeq (,$(shell which podman 2>/dev/null))
 CONTAINER_ENGINE ?= docker
@@ -21,17 +19,22 @@ include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
 IMG ?= node-observability-agent
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 
+GOLANGCI_LINT_BIN ?= go run -mod= github.com/golangci/golangci-lint/cmd/golangci-lint@v1.45.2
+
+.PHONY: verify
+verify:
+	hack/verify-deps.sh
+	hack/verify-generated.sh
+	hack/verify-gofmt.sh
+	hack/verify-bundle.sh
+
 .PHONY: lint
 ## Checks the code with golangci-lint
-lint: $(GOLANGCI_LINT_BIN)
+lint:
 	$(GOLANGCI_LINT_BIN) run -c .golangci.yaml --deadline=30m
 
-$(GOLANGCI_LINT_BIN):
-	mkdir -p $(GO_BUILD_BINDIR)
-	hack/golangci-lint.sh $(GOLANGCI_LINT_BIN)
-	
 .PHONY: build.image
-build.image:
+build.image: test verify lint
 	$(CONTAINER_ENGINE) build -t ${IMG}:${IMAGE_TAG} .
 
 .PHONY: push.image.rhel8
