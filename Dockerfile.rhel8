@@ -3,7 +3,7 @@ FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.17-openshift-4.10 AS 
 WORKDIR /go/src/github.com/openshift/node-observability-agent
 COPY . .
 
-RUN make build
+RUN make build-agent
 
 FROM registry.ci.openshift.org/ocp/4.10:base
 
