@@ -52,6 +52,3 @@ push.image.rhel8: build.image.rhel8
 deploy: push.image.rhel8
 	oc project node-observability-operator || oc new-project node-observability-operator
 	IMG=$(IMG) hack/kustomize-build.sh | oc apply -f -
-
-.PHONY: build-agent
-build-agent: test verify lint build
