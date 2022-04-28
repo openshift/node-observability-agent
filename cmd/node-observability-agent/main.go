@@ -12,11 +12,10 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/openshift/node-observability-agent/pkg/server"
+	ver "github.com/openshift/node-observability-agent/pkg/version"
 )
 
 var (
-	version       = "unknown"
-	app           = "node-observability-agent"
 	node          = os.Getenv("NODE_IP")
 	port          = flag.Int("port", 9000, "server port to listen on (default: 9000)")
 	storageFolder = flag.String("storage", "/tmp/pprofs/", "folder to which the pprof files are saved")
@@ -25,14 +24,13 @@ var (
 	crioSocket    = flag.String("crioUnixSocket", "/var/run/crio/crio.sock", "file referring to the unix socket to be used for CRIO profiling")
 	logLevel      = flag.String("loglevel", "info", "log level")
 	versionFlag   = flag.Bool("v", false, "print version")
-	appVersion    = fmt.Sprintf("%s %s", app, version)
 )
 
 func main() {
 	flag.Parse()
 
 	if *versionFlag {
-		fmt.Println(appVersion)
+		fmt.Println(ver.MakeVersionString())
 		os.Exit(0)
 	}
 
@@ -46,7 +44,7 @@ func main() {
 		lvl = log.InfoLevel
 	}
 	log.SetLevel(lvl)
-	log.Infof("Starting %s at log level %s", appVersion, *logLevel)
+	log.Infof("Starting %s at log level %s", ver.MakeVersionString(), *logLevel)
 
 	checkParameters(*tokenFile, node, *storageFolder, *crioSocket, *caCertFile)
 

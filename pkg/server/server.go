@@ -26,7 +26,6 @@ type Config struct {
 
 // Start starts HTTP server with parameters in cfg structure
 func Start(cfg Config) {
-
 	router := setupRoutes(cfg)
 
 	// Clients must use TLS 1.2 or higher
@@ -46,5 +45,4 @@ func Start(cfg Config) {
 	slog.Infof("targeting node %s", cfg.NodeIP)
 
 	panic(httpServer.ListenAndServe())
-
 }
