@@ -59,7 +59,7 @@ func TestLock(t *testing.T) {
 				previousJobID = uuid.MustParse(validUID)
 				// prepare an error file
 				errorFile := errFileName
-				err := os.WriteFile(errorFile, []byte(tC.errFileContent), 0644)
+				err := os.WriteFile(errorFile, []byte(tC.errFileContent), 0600)
 				if err != nil {
 					t.Error(err)
 				}
@@ -207,7 +207,7 @@ func TestUnlock(t *testing.T) {
 			if tc.previousState == InError {
 				// prepare an error file
 				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginTime\":\"2022-03-03T10:10:17.188097819Z\",\"EndTime\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginTime\":\"2022-03-03T10:10:17.188499431Z\",\"EndTime\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
-				err := os.WriteFile(errFileName, []byte(fileContent), 0644)
+				err := os.WriteFile(errFileName, []byte(fileContent), 0600)
 				if err != nil {
 					t.Error(err)
 				}
@@ -285,7 +285,7 @@ func TestLockInfo(t *testing.T) {
 				expectedID = uuid.MustParse(validUID)
 				// prepare an error file
 				fileContent := "{\"ID\":\"" + validUID + "\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginTime\":\"2022-03-03T10:10:17.188097819Z\",\"EndTime\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginTime\":\"2022-03-03T10:10:17.188499431Z\",\"EndTime\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
-				err := os.WriteFile(errFileName, []byte(fileContent), 0644)
+				err := os.WriteFile(errFileName, []byte(fileContent), 0600)
 				if err != nil {
 					t.Error(err)
 				}
@@ -349,7 +349,7 @@ func TestErrorFileExists(t *testing.T) {
 			if tc.expected {
 				// prepare an error file
 				fileContent := "{\"ID\":\"1234\",\"ProfilingRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginTime\":\"2022-03-03T10:10:17.188097819Z\",\"EndTime\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginTime\":\"2022-03-03T10:10:17.188499431Z\",\"EndTime\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
-				err := os.WriteFile(errorFile, []byte(fileContent), 0644)
+				err := os.WriteFile(errorFile, []byte(fileContent), 0600)
 				if err != nil {
 					t.Error(err)
 				}

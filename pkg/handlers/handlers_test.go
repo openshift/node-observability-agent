@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -64,7 +65,7 @@ func TestStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest("GET", "http://localhost/node-observability-status", nil)
 			w := httptest.NewRecorder()
-			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+			h := NewHandlers("abc", makeCACertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 			var cur uuid.UUID
 			if tc.isBusy {
 				c, _, err := h.stateLocker.Lock()
@@ -82,7 +83,7 @@ func TestStatus(t *testing.T) {
 			if tc.isError {
 				// prepare an error file
 				errorFile := "/tmp/agent.err"
-				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0644)
+				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0600)
 				if err != nil {
 					t.Error(err)
 				}
@@ -197,7 +198,7 @@ func TestHandleProfiling(t *testing.T) {
 	for _, tc := range testCases {
 
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+			h := NewHandlers("abc", makeCACertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 			r := httptest.NewRequest("GET", "http://localhost/node-observability-status", nil)
 			w := httptest.NewRecorder()
 			if tc.serverState == "busy" {
@@ -215,7 +216,7 @@ func TestHandleProfiling(t *testing.T) {
 			if tc.serverState == "error" {
 				// prepare an error file
 				errorFile := "/tmp/agent.err"
-				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0644)
+				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0600)
 				if err != nil {
 					t.Error(err)
 				}
@@ -251,7 +252,7 @@ func TestHandleProfiling(t *testing.T) {
 }
 
 func TestProcessResults(t *testing.T) {
-	h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+	h := NewHandlers("abc", makeCACertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 
 	crioRunOK := runs.ProfilingRun{
 		Type:       runs.CrioRun,
@@ -453,4 +454,17 @@ func readRunFromFile(fileName string) (runs.Run, error) {
 		return *arun, err
 	}
 	return *arun, nil
+}
+
+func makeCACertPool() *x509.CertPool {
+	content, err := ioutil.ReadFile("../../test_resources/kubelet-serving-ca.crt")
+	if err != nil {
+		panic("Unable to load CACerts file")
+	}
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(content) {
+		panic("Unable to load CACerts file into CertPool")
+
+	}
+	return caCertPool
 }

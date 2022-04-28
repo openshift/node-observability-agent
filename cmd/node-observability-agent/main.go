@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -19,6 +20,7 @@ var (
 	port          = flag.Int("port", 9000, "server port to listen on (default: 9000)")
 	storageFolder = flag.String("storage", "/tmp/pprofs/", "folder to which the pprof files are saved")
 	tokenFile     = flag.String("tokenFile", "", "file containing token to be used for kubelet profiling http request")
+	caCertFile    = flag.String("caCertFile", "/var/run/secrets/kubernetes.io/serviceaccount/kubelet-serving-ca.crt", "file containing CAChain for verifying the TLS certificate on kubelet profiling http request")
 	crioSocket    = flag.String("crioUnixSocket", "/var/run/crio/crio.sock", "file referring to the unix socket to be used for CRIO profiling")
 	logLevel      = flag.String("loglevel", "info", "log level")
 	versionFlag   = flag.Bool("v", false, "print version")
@@ -44,23 +46,35 @@ func main() {
 	log.SetLevel(lvl)
 	log.Infof("Starting %s at log level %s", ver.MakeVersionString(), *logLevel)
 
-	checkParameters(*tokenFile, node, *storageFolder, *crioSocket)
+	checkParameters(*tokenFile, node, *storageFolder, *crioSocket, *caCertFile)
 
+	/* #nosec G304 tokenFile is a parameter of the agent’s go program.
+	*  Upon creation of the NodeObservability CR, the operator creates a SA for the agent, sets its RBAC,
+	* and provides the tokenFile parameter in the daemonset manifest: The value provided is the default file
+	* kubernetes mounts on the node containing the SA JWT)
+	* The agent only takes the token file from that
+	 */
 	token, err := readTokenFile(*tokenFile)
 	if err != nil {
 		panic("Unable to read token file, or token is empty :" + err.Error())
 	}
 
+	caCerts, err := makeCACertPool(*caCertFile)
+	if err != nil {
+		panic("Unable to read caCerts file :" + err.Error())
+	}
+
 	server.Start(server.Config{
 		Port:           *port,
 		Token:          token,
+		CACerts:        caCerts,
 		StorageFolder:  *storageFolder,
 		CrioUnixSocket: *crioSocket,
 		NodeIP:         node,
 	})
 }
 
-func checkParameters(tokenFile string, nodeIP string, storageFolder string, crioUnixSocket string) {
+func checkParameters(tokenFile string, nodeIP string, storageFolder string, crioUnixSocket string, caCertFile string) {
 	//check on configs that are passed along before starting up the server
 	//1. token is readable
 	_, err := readTokenFile(tokenFile)
@@ -79,6 +93,11 @@ func checkParameters(tokenFile string, nodeIP string, storageFolder string, crio
 	if syscall.Access(crioUnixSocket, syscall.O_RDWR) != nil {
 		panic("Unable to access the the crio socket - no write permission :" + crioUnixSocket)
 	}
+	//5. CACerts file is readable
+	const R_OK uint32 = 4
+	if syscall.Access(caCertFile, R_OK) != nil {
+		panic("Unable to read the caCerts file :" + caCertFile)
+	}
 }
 
 func readTokenFile(tokenFile string) (string, error) {
@@ -90,4 +109,21 @@ func readTokenFile(tokenFile string) (string, error) {
 		return "", fmt.Errorf("%s was empty", tokenFile)
 	}
 	return string(content), nil
+}
+
+func makeCACertPool(caCertFile string) (*x509.CertPool, error) {
+
+	content, err := ioutil.ReadFile(caCertFile)
+	if err != nil {
+		return nil, err
+	}
+	if len(content) <= 0 {
+		return nil, fmt.Errorf("%s was empty", caCertFile)
+	}
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(content) {
+		return nil, fmt.Errorf("Unable to add certificates into caCertPool:\n%v", err)
+
+	}
+	return caCertPool, nil
 }

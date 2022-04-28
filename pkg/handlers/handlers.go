@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -26,18 +27,18 @@ type Handlers struct {
 	NodeIP         string
 	StorageFolder  string
 	CrioUnixSocket string
-	// mux            *sync.Mutex
-	// onGoingRunID   string
-	stateLocker statelocker.StateLocker
+	CACerts        *x509.CertPool
+	stateLocker    statelocker.StateLocker
 }
 
 type fileType string
 
 // NewHandlers creates a new instance of Handlers from the given parameters
-func NewHandlers(token string, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers {
+func NewHandlers(token string, caCerts *x509.CertPool, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers {
 	aStateLocker := statelocker.NewStateLock(filepath.Join(storageFolder, "agent."+string(errorFile)))
 	return &Handlers{
 		Token:          token,
+		CACerts:        caCerts,
 		NodeIP:         nodeIP,
 		StorageFolder:  storageFolder,
 		CrioUnixSocket: crioUnixSocket,
@@ -173,12 +174,11 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 
 			// Launch both profilings in parallel as well as the routine to wait for results
 			go func() {
-				//TODO Go back to securely making this request
-				//Prepare http client that ignores tls check
-				transCfg := &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				}
-				client := &http.Client{Transport: transCfg}
+
+				client := http.DefaultClient
+				client.Transport = http.DefaultTransport
+				client.Transport.(*http.Transport).TLSClientConfig = &tls.Config{RootCAs: h.CACerts, MinVersion: tls.VersionTLS12}
+				hlog.Info("caCertPool loaded in HTTP client Config")
 				runResultsChan <- h.profileKubelet(uid.String(), client)
 			}()
 
@@ -270,7 +270,7 @@ func writeRunToLogFile(arun runs.Run, storageFolder string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error while creating %s file : unable to marshal run of ID %s\n%w", string(logFile), arun.ID.String(), err)
 	}
-	err = os.WriteFile(fileName, bytes, 0644)
+	err = os.WriteFile(fileName, bytes, 0600)
 	if err != nil {
 		return "", fmt.Errorf("error writing  %s file: %w", fileName, err)
 	}
