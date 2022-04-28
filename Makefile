@@ -24,9 +24,7 @@ GOLANGCI_LINT_BIN ?= go run -mod= github.com/golangci/golangci-lint/cmd/golangci
 .PHONY: verify
 verify:
 	hack/verify-deps.sh
-	hack/verify-generated.sh
 	hack/verify-gofmt.sh
-	hack/verify-bundle.sh
 
 .PHONY: lint
 ## Checks the code with golangci-lint
