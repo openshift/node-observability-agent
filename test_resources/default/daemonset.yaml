@@ -8,32 +8,54 @@ spec:
   template:
     spec:
       containers:
-      - image: node-observability-agent:latest
-        imagePullPolicy: Always
+      - args:
+        - --tokenFile=/var/run/secrets/kubernetes.io/serviceaccount/token
+        - --storage=/run
+        - --caCertFile=/var/run/secrets/kubelet-serving-ca/ca-bundle.crt
         command:
         - node-observability-agent
-        args:
-        - "--tokenFile=/var/run/secrets/kubernetes.io/serviceaccount/token"
-        - "--storage=/run"
-        name: node-observability-agent
-        resources: {}
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
         env:
         - name: NODE_IP
           valueFrom:
-            fieldRef: 
+            fieldRef:
+              apiVersion: v1
               fieldPath: status.hostIP
+        image: quay.io/skhoury/node-observability-agent:487dbb4
+        imagePullPolicy: IfNotPresent
+        name: node-observability-agent
+        resources: {}
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - mountPath: /var/run/crio/crio.sock
           name: socket
-          readOnly: false
-        - mountPath: /etc/kubernetes/kubelet-ca.crt
-          name: certificate
+        - mountPath: /var/run/secrets/kubelet-serving-ca/
+          name: kubelet-ca
+          readOnly: true
+      - args:
+        - --secure-listen-address=0.0.0.0:8443
+        - --upstream=http://127.0.0.1:9000/
+        - --tls-cert-file=/var/run/secrets/openshift.io/certs/tls.crt
+        - --tls-private-key-file=/var/run/secrets/openshift.io/certs/tls.key
+        - --logtostderr=true
+        - --v=2
+        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.11.0
+        imagePullPolicy: IfNotPresent
+        name: kube-rbac-proxy
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/run/secrets/openshift.io/certs
+          name: certs
           readOnly: true
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: node-observability-agent
       serviceAccountName: node-observability-agent
       terminationGracePeriodSeconds: 30
       volumes:
@@ -41,7 +63,16 @@ spec:
           path: /var/run/crio/crio.sock
           type: Socket
         name: socket
-      - hostPath:
-          path: /etc/kubernetes/kubelet-ca.crt
-          type: File
-        name: certificate
+      - configMap:
+          defaultMode: 420
+          name: node-observability-agent
+        name: kubelet-ca
+      - name: certs
+        secret:
+          defaultMode: 420
+          secretName: node-observability-agent
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate

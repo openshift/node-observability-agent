@@ -16,6 +16,14 @@ commonLabels:
 configurations:
 - kustomizeconfig/serviceaccount.yaml
 
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+- name: node-observability-agent
+  files:
+  - ca-bundle.crt
+
 resources:
 - daemonset.yaml
 - machine_config.yaml

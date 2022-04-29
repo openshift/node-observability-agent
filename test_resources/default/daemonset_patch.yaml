@@ -9,13 +9,3 @@ spec:
       - name: node-observability-agent
         securityContext:
           privileged: true 
-      - name: kube-rbac-proxy
-        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.11.0
-        args:
-        - "--secure-listen-address=0.0.0.0:8443"
-        - "--upstream=http://127.0.0.1:9000/"
-        - "--logtostderr=true"
-        - "--v=2"
-        # TODO:
-        # - "--tls-cert-file=/var/run/secrets/serving-cert/tls.crt"
-        # - "--tls-private-key-file=/var/run/secrets/serving-cert/tls.key"
