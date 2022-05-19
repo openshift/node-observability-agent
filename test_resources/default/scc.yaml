@@ -26,8 +26,9 @@ seLinuxContext:
   type: MustRunAs
 supplementalGroups:
   type: RunAsAny
+users: []
 volumes:
-- secret
+- configMap
 - hostPath
 - persistentVolumeClaim
-- configMap
+- secret
