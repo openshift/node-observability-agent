@@ -20,7 +20,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: status.hostIP
-        image: quay.io/skhoury/node-observability-agent:487dbb4
+        image: node-observability-agent:latest
         imagePullPolicy: IfNotPresent
         name: node-observability-agent
         resources: {}

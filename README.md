@@ -24,7 +24,7 @@ In case of error, `/node-observability-status` and `/node-observability-pprof` w
 The agent can be run locally but is best run in a pod on a Kubernetes cluster.
 
 ```bash
-$ ./scripts/kubelet-serving-ca.sh # Build RUN make build
+$ ./hack/kubelet-serving-ca.sh # Build RUN make build
 $ IMG=quay.io/user-xyz/node-observability-agent make deploy
 $ kubectl port-forward svc/node-observability-agent 9000:80
 ```
