@@ -43,7 +43,7 @@ func (h *Handlers) profileKubelet(uid string, client *http.Client) runs.Profilin
 	}
 
 	defer res.Body.Close()
-	errFile := h.fileHandler(uid, &res.Body)
+	errFile := h.fileHandler(uid, "kubelet", &res.Body)
 	if errFile != nil {
 		run.EndTime = time.Now()
 		run.Error = fmt.Sprintf("error fileHandler - kubelet profiling for node %s: %s", h.NodeIP, errFile)
@@ -57,8 +57,8 @@ func (h *Handlers) profileKubelet(uid string, client *http.Client) runs.Profilin
 
 // G307 (CWE-703) - Mitigated
 // Deferring unsafe method "Close" on type "*os.File"
-func (h *Handlers) fileHandler(uid string, body *io.ReadCloser) error {
-	out, err := os.Create(filepath.Join(h.StorageFolder, "kubelet-"+uid+".pprof"))
+func (h *Handlers) fileHandler(uid, profileType string, body *io.ReadCloser) error {
+	out, err := os.Create(filepath.Join(h.StorageFolder, profileType+"-"+uid+".pprof"))
 	if err != nil {
 		return err
 	}

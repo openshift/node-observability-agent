@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
-	"github.com/openshift/node-observability-agent/pkg/connectors"
 	"github.com/openshift/node-observability-agent/pkg/runs"
 	"github.com/openshift/node-observability-agent/pkg/statelocker"
 )
@@ -183,9 +182,11 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 			}()
 
 			go func() {
-				connector := connectors.Connector{}
-				connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", filepath.Join(h.StorageFolder, "crio-"+uid.String()+".pprof")})
-				runResultsChan <- h.profileCrio(uid.String(), &connector)
+				// connector := connectors.Connector{}
+				// connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", filepath.Join(h.StorageFolder, "crio-"+uid.String()+".pprof")})
+				client := http.DefaultClient
+				client.Transport = http.DefaultTransport
+				runResultsChan <- h.profileCrio(uid.String(), client)
 			}()
 
 			go h.processResults(uid, runResultsChan)
