@@ -2,10 +2,7 @@ package handlers
 
 import (
 	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/openshift/node-observability-agent/pkg/runs"
@@ -53,18 +50,4 @@ func (h *Handlers) profileKubelet(uid string, client *http.Client) runs.Profilin
 	run.EndTime = time.Now()
 	run.Successful = true
 	return run
-}
-
-// G307 (CWE-703) - Mitigated
-// Deferring unsafe method "Close" on type "*os.File"
-func (h *Handlers) fileHandler(uid, profileType string, body *io.ReadCloser) error {
-	out, err := os.Create(filepath.Join(h.StorageFolder, profileType+"-"+uid+".pprof"))
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(out, *body)
-	if err != nil {
-		return err
-	}
-	return out.Close()
 }
