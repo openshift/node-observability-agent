@@ -8,7 +8,8 @@ RUN go build -ldflags "-X main.version=${VERSION}" -mod vendor -o node-observabi
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:8.5
 
-RUN chgrp -R 0 /run/node-observability && \
+RUN mkdir /run/node-observability && \
+    chgrp -R 0 /run/node-observability && \
     chmod -R g=u /run/node-observability
 
 COPY --from=builder /opt/app-root/node-observability-agent /usr/bin/
