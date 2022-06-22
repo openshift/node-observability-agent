@@ -11,7 +11,9 @@ LABEL io.k8s.display-name="OpenShift NodeObservabilityAgent" \
       io.k8s.description="Collects node profiling data" \
       io.openshift.tags="openshift,nodeobservability,nodeobservabilityagent"
 
-RUN mkdir /run/node-observability && \
+RUN chgrp 0 /run && \
+    chmod g=u /run && \
+    mkdir /run/node-observability && \
     chgrp -R 0 /run/node-observability && \
     chmod -R g=u /run/node-observability
 
