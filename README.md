@@ -6,7 +6,6 @@ List of requrired parameters to be passed to the agent:
 - node : IP address of the node on which to perform the profiling
 - storageFolder : folder to which the pprof files are saved
 - tokenFile : file containing token to be used for kubelet profiling http request
-- crioSocket : file referring to the unix socket to be used for CRIO profiling
 
 It accepts requests for the following endpoints:
 
