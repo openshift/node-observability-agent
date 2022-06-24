@@ -37,7 +37,7 @@ func TestProfileKubelet(t *testing.T) {
 	}{
 		{
 			name:     "KubeletProfiling passes, ProfileRun returned",
-			handlers: NewHandlers("abc", caCertPool, "/tmp", "127.0.0.1"),
+			handlers: NewHandlers("abc", caCertPool, "/tmp", "/tmp/fakeSocket", "127.0.0.1"),
 			client: NewHTTPTestClient(func(req *http.Request) *http.Response {
 				return &http.Response{
 					StatusCode: 200,
@@ -56,7 +56,7 @@ func TestProfileKubelet(t *testing.T) {
 		},
 		{
 			name:     "HTTP request 401, ProfileRun in error",
-			handlers: NewHandlers("abc", caCertPool, "/tmp", "127.0.0.1"),
+			handlers: NewHandlers("abc", caCertPool, "/tmp", "/tmp/fakeSocket", "127.0.0.1"),
 
 			//client wouldnt be used in this case
 			client: NewHTTPTestClient(func(req *http.Request) *http.Response {
@@ -75,7 +75,7 @@ func TestProfileKubelet(t *testing.T) {
 		},
 		{
 			name:     "KubeletProfiling fails to save, ProfileRun in error",
-			handlers: NewHandlers("abc", caCertPool, "non-existent-path", "127.0.0.1"),
+			handlers: NewHandlers("abc", caCertPool, "non-existent-path", "/tmp/fakeSocket", "127.0.0.1"),
 			client: NewHTTPTestClient(func(req *http.Request) *http.Response {
 				return &http.Response{
 					StatusCode: 200,

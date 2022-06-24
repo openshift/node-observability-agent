@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
+	"github.com/openshift/node-observability-agent/pkg/connectors"
 	"github.com/openshift/node-observability-agent/pkg/runs"
 	"github.com/openshift/node-observability-agent/pkg/statelocker"
 )
@@ -23,24 +23,26 @@ var hlog = logrus.WithField("module", "handler")
 
 // Handlers holds the parameters necessary for running the CRIO and Kubelet profiling
 type Handlers struct {
-	Token         string
-	NodeIP        string
-	StorageFolder string
-	CACerts       *x509.CertPool
-	stateLocker   statelocker.StateLocker
+	Token          string
+	NodeIP         string
+	StorageFolder  string
+	CrioUnixSocket string
+	CACerts        *x509.CertPool
+	stateLocker    statelocker.StateLocker
 }
 
 type fileType string
 
 // NewHandlers creates a new instance of Handlers from the given parameters
-func NewHandlers(token string, caCerts *x509.CertPool, storageFolder string, nodeIP string) *Handlers {
+func NewHandlers(token string, caCerts *x509.CertPool, storageFolder string, crioUnixSocket string, nodeIP string) *Handlers {
 	aStateLocker := statelocker.NewStateLock(filepath.Join(storageFolder, "agent."+string(errorFile)))
 	return &Handlers{
-		Token:         token,
-		CACerts:       caCerts,
-		NodeIP:        nodeIP,
-		StorageFolder: storageFolder,
-		stateLocker:   aStateLocker,
+		Token:          token,
+		CACerts:        caCerts,
+		NodeIP:         nodeIP,
+		StorageFolder:  storageFolder,
+		CrioUnixSocket: crioUnixSocket,
+		stateLocker:    aStateLocker,
 	}
 }
 
@@ -181,9 +183,9 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 			}()
 
 			go func() {
-				client := http.DefaultClient
-				client.Transport = http.DefaultTransport
-				runResultsChan <- h.profileCrio(uid.String(), client)
+				connector := connectors.Connector{}
+				connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", filepath.Join(h.StorageFolder, "crio-"+uid.String()+".pprof")})
+				runResultsChan <- h.profileCrio(uid.String(), &connector)
 			}()
 
 			go h.processResults(uid, runResultsChan)
@@ -258,20 +260,6 @@ func (h *Handlers) processResults(uid uuid.UUID, runResultsChan chan runs.Profil
 			hlog.Fatal(err)
 		}
 	}
-}
-
-// G307 (CWE-703) - Mitigated
-// Deferring unsafe method "Close" on type "*os.File"
-func (h *Handlers) fileHandler(uid, profileType string, body *io.ReadCloser) error {
-	out, err := os.Create(filepath.Join(h.StorageFolder, profileType+"-"+uid+".pprof"))
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(out, *body)
-	if err != nil {
-		return err
-	}
-	return out.Close()
 }
 
 func writeRunToLogFile(arun runs.Run, storageFolder string) (string, error) {

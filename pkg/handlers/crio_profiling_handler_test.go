@@ -1,40 +1,23 @@
 package handlers
 
 import (
-	"bytes"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"testing"
 
+	"github.com/openshift/node-observability-agent/pkg/connectors"
 	"github.com/openshift/node-observability-agent/pkg/runs"
-)
-
-const (
-	url = "http://127.0.0.1:6060/debug/pprof/profile"
 )
 
 func TestProfileCrio(t *testing.T) {
 	testCases := []struct {
-		name       string
-		client     *http.Client
-		storageDir string
-		expected   runs.ProfilingRun
+		name      string
+		connector connectors.CmdWrapper
+		expected  runs.ProfilingRun
 	}{
 		{
-			name: "CrioProfiling passes, ProfileRun returned",
-			client: NewHTTPTestClient(func(req *http.Request) *http.Response {
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					// Send response to be tested
-
-					Body: ioutil.NopCloser(bytes.NewBuffer([]byte("OK"))),
-					// Must be set to non-nil value or it panics
-					Header: make(http.Header),
-				}
-			}),
-			storageDir: "/tmp",
+			name:      "Curl command successful, OK",
+			connector: &connectors.FakeConnector{Flag: connectors.NoError},
 			expected: runs.ProfilingRun{
 				Type:       runs.CrioRun,
 				Successful: true,
@@ -42,44 +25,30 @@ func TestProfileCrio(t *testing.T) {
 			},
 		},
 		{
-			name: "Network error, ProfilingRun contains error",
-			client: NewHTTPTestClient(func(req *http.Request) *http.Response {
-				return &http.Response{
-					StatusCode: http.StatusBadRequest,
-					// Must be set to non-nil value or it panics
-					Header: make(http.Header),
-				}
-			}),
-			storageDir: "/tmp",
+			name:      "Network error on curl, ProfilingRun contains error",
+			connector: &connectors.FakeConnector{Flag: connectors.SocketErr},
 			expected: runs.ProfilingRun{
 				Type:       runs.CrioRun,
 				Successful: false,
-				Error:      fmt.Sprintf("error with HTTP request for crio profiling %s: statusCode %d", url, http.StatusBadRequest),
+				Error:      fmt.Sprintf("error running CRIO profiling :\n%s", "curl: (7) Couldn't connect to server"),
 			},
 		},
 		{
-			name: "IO error at storing result, ProfilingRun contains error",
-			client: NewHTTPTestClient(func(req *http.Request) *http.Response {
-				return &http.Response{
-					StatusCode: http.StatusBadRequest,
-					Body:       ioutil.NopCloser(bytes.NewBuffer([]byte("OK"))),
-					// Must be set to non-nil value or it panics
-					Header: make(http.Header),
-				}
-			}),
-			storageDir: "/inexistingFolder",
+			name:      "IO error at storing result, ProfilingRun contains error",
+			connector: &connectors.FakeConnector{Flag: connectors.WriteErr},
 			expected: runs.ProfilingRun{
 				Type:       runs.CrioRun,
 				Successful: false,
-				Error:      fmt.Sprintf("error fileHandler - crio profiling for node %s: %s", "127.0.0.1", "/tmp"),
+				Error:      fmt.Sprintf("error running CRIO profiling :\n%s", "curl: (23) Failure writing output to destination"),
 			},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewHandlers("abc", x509.NewCertPool(), tc.storageDir, "127.0.0.1")
+			h := NewHandlers("abc", x509.NewCertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+			tc.connector.Prepare("curl", []string{"--unix-socket", h.CrioUnixSocket, "http://localhost/debug/pprof/profile", "--output", h.StorageFolder + "crio-1234.pprof"})
 
-			pr := h.profileCrio("1234", tc.client)
+			pr := h.profileCrio("1234", tc.connector)
 			if tc.expected.Type != pr.Type {
 				t.Errorf("Expecting a ProfilingRun of type %s but was %s", tc.expected.Type, pr.Type)
 			}
