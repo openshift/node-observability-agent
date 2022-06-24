@@ -17,10 +17,9 @@ const (
 
 func TestProfileCrio(t *testing.T) {
 	testCases := []struct {
-		name       string
-		client     *http.Client
-		storageDir string
-		expected   runs.ProfilingRun
+		name     string
+		client   *http.Client
+		expected runs.ProfilingRun
 	}{
 		{
 			name: "CrioProfiling passes, ProfileRun returned",
@@ -34,7 +33,6 @@ func TestProfileCrio(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			storageDir: "/tmp",
 			expected: runs.ProfilingRun{
 				Type:       runs.CrioRun,
 				Successful: true,
@@ -50,7 +48,6 @@ func TestProfileCrio(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			storageDir: "/tmp",
 			expected: runs.ProfilingRun{
 				Type:       runs.CrioRun,
 				Successful: false,
@@ -67,7 +64,6 @@ func TestProfileCrio(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			storageDir: "/inexistingFolder",
 			expected: runs.ProfilingRun{
 				Type:       runs.CrioRun,
 				Successful: false,
@@ -77,7 +73,7 @@ func TestProfileCrio(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewHandlers("abc", x509.NewCertPool(), tc.storageDir, "127.0.0.1")
+			h := NewHandlers("abc", x509.NewCertPool(), "/tmp", "127.0.0.1")
 
 			pr := h.profileCrio("1234", tc.client)
 			if tc.expected.Type != pr.Type {
