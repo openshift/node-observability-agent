@@ -21,6 +21,7 @@ var (
 	storageFolder = flag.String("storage", "/tmp/pprofs/", "folder to which the pprof files are saved")
 	tokenFile     = flag.String("tokenFile", "", "file containing token to be used for kubelet profiling http request")
 	caCertFile    = flag.String("caCertFile", "/var/run/secrets/kubernetes.io/serviceaccount/kubelet-serving-ca.crt", "file containing CAChain for verifying the TLS certificate on kubelet profiling http request")
+	crioSocket    = flag.String("crioUnixSocket", "/var/run/crio/crio.sock", "file referring to the unix socket to be used for CRIO profiling")
 	logLevel      = flag.String("loglevel", "info", "log level")
 	versionFlag   = flag.Bool("v", false, "print version")
 )
@@ -45,7 +46,7 @@ func main() {
 	log.SetLevel(lvl)
 	log.Infof("Starting %s at log level %s", ver.MakeVersionString(), *logLevel)
 
-	checkParameters(*tokenFile, node, *storageFolder, *caCertFile)
+	checkParameters(*tokenFile, node, *storageFolder, *crioSocket, *caCertFile)
 
 	/* #nosec G304 tokenFile is a parameter of the agent’s go program.
 	*  Upon creation of the NodeObservability CR, the operator creates a SA for the agent, sets its RBAC,
@@ -64,15 +65,16 @@ func main() {
 	}
 
 	server.Start(server.Config{
-		Port:          *port,
-		Token:         token,
-		CACerts:       caCerts,
-		StorageFolder: *storageFolder,
-		NodeIP:        node,
+		Port:           *port,
+		Token:          token,
+		CACerts:        caCerts,
+		StorageFolder:  *storageFolder,
+		CrioUnixSocket: *crioSocket,
+		NodeIP:         node,
 	})
 }
 
-func checkParameters(tokenFile string, nodeIP string, storageFolder string, caCertFile string) {
+func checkParameters(tokenFile string, nodeIP string, storageFolder string, crioUnixSocket string, caCertFile string) {
 	//check on configs that are passed along before starting up the server
 	//1. token is readable
 	_, err := readTokenFile(tokenFile)
@@ -86,6 +88,10 @@ func checkParameters(tokenFile string, nodeIP string, storageFolder string, caCe
 	//3. StorageFolder is accessible in readwrite
 	if syscall.Access(storageFolder, syscall.O_RDWR) != nil {
 		panic("Unable to access the folder specified for saving the profiling data - no write permission :" + storageFolder)
+	}
+	//4. CRIO socket is accessible in readwrite
+	if syscall.Access(crioUnixSocket, syscall.O_RDWR) != nil {
+		panic("Unable to access the the crio socket - no write permission :" + crioUnixSocket)
 	}
 	//5. CACerts file is readable
 	const R_OK uint32 = 4
@@ -116,7 +122,7 @@ func makeCACertPool(caCertFile string) (*x509.CertPool, error) {
 	}
 	caCertPool := x509.NewCertPool()
 	if !caCertPool.AppendCertsFromPEM(content) {
-		return nil, fmt.Errorf("unable to add certificates into caCertPool: %v", err)
+		return nil, fmt.Errorf("Unable to add certificates into caCertPool:\n%v", err)
 
 	}
 	return caCertPool, nil
