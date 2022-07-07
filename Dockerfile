@@ -9,5 +9,5 @@ RUN go build -ldflags "-X main.version=${VERSION}" -mod vendor -o node-observabi
 FROM registry.access.redhat.com/ubi8/ubi-minimal:8.5
 
 COPY --from=builder /opt/app-root/node-observability-agent /usr/bin/
-
-ENTRYPOINT ["sh", "-c", "node-observability-agent --tokenFile /var/run/secrets/kubernetes.io/serviceaccount/token --storage /host/tmp/pprofs/"]
+USER 65532:65532
+#TODO(alebedev): SET UP THE ENTRYPOINT TO THE OPERATOR BINARY!
