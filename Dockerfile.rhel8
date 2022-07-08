@@ -11,6 +11,10 @@ LABEL io.k8s.display-name="OpenShift NodeObservabilityAgent" \
       io.k8s.description="Collects node profiling data" \
       io.openshift.tags="openshift,nodeobservability,nodeobservabilityagent"
 
+RUN mkdir /run/node-observability && \
+    chgrp -R 0 /run/node-observability && \
+    chmod -R g=u /run/node-observability
+
 COPY --from=builder /go/src/github.com/openshift/node-observability-agent/bin/node-observability-agent /usr/bin/
 USER 65532:65532
 #TODO(alebedev): SET UP THE ENTRYPOINT TO THE OPERATOR BINARY!
