@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -65,7 +66,7 @@ func TestStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest("GET", "http://localhost/node-observability-status", nil)
 			w := httptest.NewRecorder()
-			h := NewHandlers("abc", makeCACertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+			h := NewHandlers("abc", makeCACertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1", true)
 			var cur uuid.UUID
 			if tc.isBusy {
 				c, _, err := h.stateLocker.Lock()
@@ -198,7 +199,7 @@ func TestHandleProfiling(t *testing.T) {
 	for _, tc := range testCases {
 
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewHandlers("abc", makeCACertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+			h := NewHandlers("abc", makeCACertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1", true)
 			r := httptest.NewRequest("GET", "http://localhost/node-observability-status", nil)
 			w := httptest.NewRecorder()
 			if tc.serverState == "busy" {
@@ -252,7 +253,7 @@ func TestHandleProfiling(t *testing.T) {
 }
 
 func TestProcessResults(t *testing.T) {
-	h := NewHandlers("abc", makeCACertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1")
+	h := NewHandlers("abc", makeCACertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1", true)
 
 	crioRunOK := runs.ProfilingRun{
 		Type:       runs.CrioRun,
@@ -425,6 +426,26 @@ func TestProcessResults(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestOutputFilePaths(t *testing.T) {
+	h := Handlers{StorageFolder: "/fakedir"}
+
+	if expected, got := "/fakedir/crio-fakeid.pprof", h.crioPprofOutputFilePath("fakeid"); expected != got {
+		t.Errorf("Wrong crio output path, expected: %q, but got: %q", expected, got)
+	}
+
+	if expected, got := "/fakedir/kubelet-fakeid.pprof", h.kubeletPprofOutputFilePath("fakeid"); expected != got {
+		t.Errorf("Wrong kubelet output path, expected: %q, but got: %q", expected, got)
+	}
+
+	if expected, got := fmt.Sprintf("/fakedir/%s.log", validUID), h.runLogOutputFilePath(runs.Run{ID: uuid.MustParse(validUID)}); expected != got {
+		t.Errorf("Wrong log output path, expected: %q, but got: %q", expected, got)
+	}
+
+	if expected, got := "/fakedir/agent.err", h.errorOutputFilePath(); expected != got {
+		t.Errorf("Wrong log output path, expected: %q, but got: %q", expected, got)
 	}
 }
 
