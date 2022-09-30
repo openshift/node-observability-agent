@@ -18,6 +18,8 @@ import (
 var (
 	nodeIP               = os.Getenv("NODE_IP")
 	port                 = flag.Int("port", 9000, "server port to listen on (default: 9000)")
+	unixSocket           = flag.String("unixSocket", "/var/run/nobagent.sock", "unix socket to listen on (default: /var/run/nobagent.sock)")
+	preferUnixSocket     = flag.Bool("preferUnixSocket", false, "listen on the unix socket instead of localhost:port")
 	storageFolder        = flag.String("storage", "/tmp/pprofs/", "folder to which the pprof files are saved")
 	tokenFile            = flag.String("tokenFile", "", "file containing token to be used for kubelet profiling http request")
 	caCertFile           = flag.String("caCertFile", "/var/run/secrets/kubernetes.io/serviceaccount/kubelet-serving-ca.crt", "file containing CAChain for verifying the TLS certificate on kubelet profiling http request")
@@ -47,7 +49,7 @@ func main() {
 	log.SetLevel(lvl)
 	log.Infof("Starting %s at log level %s", ver.MakeVersionString(), *logLevel)
 
-	checkParameters(*tokenFile, nodeIP, *storageFolder, *crioUnixSocket, *crioPreferUnixSocket, *caCertFile)
+	checkParameters(nodeIP, *storageFolder, *crioUnixSocket, *crioPreferUnixSocket, *caCertFile)
 
 	/* #nosec G304 tokenFile is a parameter of the agent’s go program.
 	*  Upon creation of the NodeObservability CR, the operator creates a SA for the agent, sets its RBAC,
@@ -65,39 +67,39 @@ func main() {
 		panic("Unable to read caCerts file :" + err.Error())
 	}
 
-	server.Start(server.Config{
+	if err := server.Start(server.Config{
 		Port:                 *port,
+		UnixSocket:           *unixSocket,
+		PreferUnixSocket:     *preferUnixSocket,
 		Token:                token,
 		CACerts:              caCerts,
 		StorageFolder:        *storageFolder,
 		CrioUnixSocket:       *crioUnixSocket,
 		CrioPreferUnixSocket: *crioPreferUnixSocket,
 		NodeIP:               nodeIP,
-	})
+	}); err != nil {
+		log.Errorf("Error from server: %s", err.Error())
+	}
+	log.Info("Stopped")
 }
 
-func checkParameters(tokenFile string, nodeIP string, storageFolder string, crioUnixSocket string, crioPreferUnixSocket bool, caCertFile string) {
+func checkParameters(nodeIP, storageFolder, crioUnixSocket string, crioPreferUnixSocket bool, caCertFile string) {
 	//check on configs that are passed along before starting up the server
-	//1. token is readable
-	_, err := readTokenFile(tokenFile)
-	if err != nil {
-		panic("Unable to read token file")
-	}
-	//2. nodeIP is found
+	//1. nodeIP is found
 	if nodeIP == "" || net.ParseIP(nodeIP) == nil {
-		panic("Environment variable NODE_IP not found, or doesnt contain a valid IP address")
+		panic("Environment variable NODE_IP not found, or doesn't contain a valid IP address")
 	}
-	//3. StorageFolder is accessible in readwrite
+	//2. StorageFolder is accessible in readwrite
 	if err := syscall.Access(storageFolder, syscall.O_RDWR); err != nil {
-		panic(fmt.Sprintf("Unable to access the storage folderi for saving the profiling data %q: %v", storageFolder, err))
+		panic(fmt.Sprintf("Unable to access the storage folder for saving the profiling data %q: %v", storageFolder, err))
 	}
-	//4. CRIO socket is accessible in readwrite
+	//3. CRIO socket is accessible in readwrite
 	if crioPreferUnixSocket {
 		if err := syscall.Access(crioUnixSocket, syscall.O_RDWR); err != nil {
 			panic(fmt.Sprintf("Unable to access the crio socket %q: %v", crioUnixSocket, err))
 		}
 	}
-	//5. CACerts file is readable
+	//4. CACerts file is readable
 	const R_OK uint32 = 4
 	if syscall.Access(caCertFile, R_OK) != nil {
 		panic("Unable to read the caCerts file :" + caCertFile)

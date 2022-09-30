@@ -178,6 +178,8 @@ func (h *Handlers) processResults(uid uuid.UUID, runResultsChan chan runs.Profil
 	// wait for the results
 	arun.ProfilingRuns = []runs.ProfilingRun{}
 	isTimeout := false
+
+	hlog.Infof("start processing results of profiling requests, runID: %s", uid.String())
 	for nb := 0; nb < 2 && !isTimeout; {
 		select {
 		case pr := <-runResultsChan:

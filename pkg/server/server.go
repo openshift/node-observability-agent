@@ -1,10 +1,16 @@
 package server
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -17,6 +23,8 @@ var slog = logrus.WithField("module", "server")
 // Config holds the parameters necessary for the HTTP server, and agent in general need to run
 type Config struct {
 	Port                 int
+	UnixSocket           string
+	PreferUnixSocket     bool
 	Token                string
 	CACerts              *x509.CertPool
 	NodeIP               string
@@ -26,7 +34,7 @@ type Config struct {
 }
 
 // Start starts HTTP server with parameters in cfg structure
-func Start(cfg Config) {
+func Start(cfg Config) error {
 	router := setupRoutes(cfg)
 
 	// Clients must use TLS 1.2 or higher
@@ -42,8 +50,38 @@ func Start(cfg Config) {
 		WriteTimeout: 40 * time.Second,
 	}
 
-	slog.Infof("listening on http://%s:%d", loopback, cfg.Port)
-	slog.Infof("targeting node %s", cfg.NodeIP)
+	network := "tcp"
+	addr := net.JoinHostPort(loopback, strconv.Itoa(cfg.Port))
+	if cfg.PreferUnixSocket {
+		network = "unix"
+		addr = cfg.UnixSocket
+	}
 
-	panic(httpServer.ListenAndServe())
+	// gracefully shutdown HTTP server
+	idleConnClosed := make(chan struct{})
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
+		slog.Info("Received signal: ", <-sigCh)
+		if err := httpServer.Shutdown(context.Background()); err != nil {
+			slog.Errorf("Failed to gracefully shut down the server: %s", err.Error())
+		}
+		close(sigCh)
+		close(idleConnClosed)
+	}()
+
+	slog.Infof("Start listening on %s://%s", network, addr)
+	slog.Infof("Targeting node %s", cfg.NodeIP)
+
+	ln, err := net.Listen(network, addr)
+	if err != nil {
+		return fmt.Errorf("failed on listen: %w", err)
+	}
+	if err := httpServer.Serve(ln); err != http.ErrServerClosed {
+		return fmt.Errorf("failed on serve: %w", err)
+	}
+
+	<-idleConnClosed
+
+	return nil
 }
