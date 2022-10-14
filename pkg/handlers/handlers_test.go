@@ -155,7 +155,10 @@ func TestSendUID(t *testing.T) {
 	}
 }
 
-func TestHandleProfiling(t *testing.T) {
+func TestHandleProfilingStateMgmt(t *testing.T) {
+	errorFile := "/tmp/agent.err"
+	handlingPollInterval := 100 * time.Millisecond
+	handlingPollMaxRetry := 5
 
 	testCases := []struct {
 		name           string
@@ -203,51 +206,68 @@ func TestHandleProfiling(t *testing.T) {
 			r := httptest.NewRequest("GET", "http://localhost/node-observability-status", nil)
 			w := httptest.NewRecorder()
 			if tc.serverState == "busy" {
-				_, _, err := h.stateLocker.Lock()
-				defer func() {
-					err := h.stateLocker.Unlock()
-					if err != nil {
-						t.Fatal("unable to release turn")
-					}
-				}()
+				id, state, err := h.stateLocker.Lock()
 				if err != nil {
-					t.Errorf("Unexpected error : %v", err)
+					t.Errorf("failed to lock the state: %v", err)
 				}
+				t.Logf("state changed: %s, run ID: %s", state, id)
 			}
 			if tc.serverState == "error" {
 				// prepare an error file
-				errorFile := "/tmp/agent.err"
 				err := os.WriteFile(errorFile, []byte(tc.errFileContent), 0600)
 				if err != nil {
 					t.Error(err)
 				}
-				defer func() {
-					if os.Remove(errorFile) != nil {
-						t.Log("unable to remove file, already removed")
-					}
-				}()
+				t.Logf("error file updated: %q", tc.errFileContent)
 			}
+
 			h.HandleProfiling(w, r)
 			resp := w.Result()
 
 			if resp.StatusCode != tc.expectedCode {
-				t.Errorf("Expected status code %d but was %d", tc.expectedCode, resp.StatusCode)
+				t.Errorf("expected status code %d but was %d", tc.expectedCode, resp.StatusCode)
 			}
 			uid, s, err := h.stateLocker.LockInfo()
 			if tc.expectedState != s {
 				t.Errorf("expected state to become %s, but was %s", tc.expectedState, s)
 			}
+
 			if tc.expectedError && err == nil {
 				t.Error("error was expected but none was found")
 			}
 			if !tc.expectedError && err != nil {
-				t.Errorf("Unexpected error : %v", err)
+				t.Errorf("unexpected error : %v", err)
 			}
 			if tc.expectedState != statelocker.InError {
 				if uid == uuid.Nil {
 					t.Error("uid was empty when it shouldnt")
 				}
 			}
+
+			// wait for the end of the profiling to avoid test collisions
+			// unless no profiling was run: when taken state was set by the test itself
+
+			if tc.serverState == "busy" {
+				return
+			}
+
+			for i := 0; i < handlingPollMaxRetry; i++ {
+				_, s, _ = h.stateLocker.LockInfo()
+				switch s {
+				case statelocker.Free:
+					t.Logf("profile handling finished")
+					return
+				case statelocker.InError:
+					t.Logf("profile handling finished")
+					if err := os.Remove(errorFile); err != nil {
+						t.Fatalf("unable to remove file: %v", err)
+					}
+					t.Logf("error file removed")
+					return
+				}
+				time.Sleep(handlingPollInterval)
+			}
+			t.Errorf("timed out waiting for the end of profile handling")
 		})
 	}
 }

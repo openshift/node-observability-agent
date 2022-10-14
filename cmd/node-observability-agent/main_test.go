@@ -7,7 +7,6 @@ import (
 
 type TestCase struct {
 	name                 string
-	tokenFile            string
 	caCertFile           string
 	nodeIP               string
 	storageFolder        string
@@ -162,75 +161,39 @@ func TestReadTokenFile(t *testing.T) {
 	}
 }
 func TestCheckParameters(t *testing.T) {
-	// #nosec G101 this is just an empty test file
-	validTokenFile := "/tmp/aToken"
-	err := os.WriteFile(validTokenFile, []byte("abc"), 0600)
-	if err != nil {
-		t.Error(err)
-	}
-	// #nosec G101 this is just an empty test file
-	invalidTokenFile := "/tmp/noToken"
-	// #nosec G101 this is just an empty test file
-	unReadableTokenFile := "/tmp/noReadToken"
-	_, err = os.Create(unReadableTokenFile)
-	if err != nil {
-		t.Error(err)
-	}
-	err = os.Chmod(unReadableTokenFile, 0311)
-	if err != nil {
-		t.Error(err)
-	}
-
-	defer func() {
-		if os.Remove(validTokenFile) != nil {
-			t.Error(err)
-		}
-	}()
-	defer func() {
-		if os.Remove(unReadableTokenFile) != nil {
-			t.Error(err)
-		}
-	}()
-
 	validSocket := "/tmp/aSocket"
-	_, err = os.Create(validSocket)
-	if err != nil {
+	if _, err := os.Create(validSocket); err != nil {
 		t.Error(err)
 	}
-	err = os.Chmod(validSocket, 0755)
-	if err != nil {
+	if err := os.Chmod(validSocket, 0755); err != nil {
 		t.Error(err)
 	}
 	invalidSocket := "/tmp/noSocket"
 	unWriteableSocket := "/tmp/unWriteableSocket"
-	_, err = os.Create(unWriteableSocket)
-	if err != nil {
+	if _, err := os.Create(unWriteableSocket); err != nil {
 		t.Error(err)
 	}
-	err = os.Chmod(unWriteableSocket, 0444)
-	if err != nil {
+	if err := os.Chmod(unWriteableSocket, 0444); err != nil {
 		t.Error(err)
 	}
 	defer func() {
-		if os.Remove(validSocket) != nil {
+		if err := os.Remove(validSocket); err != nil {
 			t.Error(err)
 		}
 	}()
 	defer func() {
-		if os.Remove(unWriteableSocket) != nil {
+		if err := os.Remove(unWriteableSocket); err != nil {
 			t.Error(err)
 		}
 	}()
 
 	validStorageFolder := "/tmp/aFolder"
-	err = os.Mkdir(validStorageFolder, 0755)
-	if err != nil {
+	if err := os.Mkdir(validStorageFolder, 0755); err != nil {
 		t.Error(err)
 	}
 	invalidStorageFolder := "/tmp/noFolder"
 	unWriteableStorageFolder := "/tmp/unWriteableFolder"
-	err = os.Mkdir(unWriteableStorageFolder, 0555)
-	if err != nil {
+	if err := os.Mkdir(unWriteableStorageFolder, 0555); err != nil {
 		t.Error(err)
 	}
 	defer os.Remove(validStorageFolder)
@@ -241,28 +204,25 @@ func TestCheckParameters(t *testing.T) {
 	cert := "A Fake Cert Content"
 	// #nosec G101 this is just a test file, cotaining random text
 	validCACertFile := "/tmp/aCA"
-	err = os.WriteFile(validCACertFile, []byte(cert), 0400)
-	if err != nil {
+	if err := os.WriteFile(validCACertFile, []byte(cert), 0400); err != nil {
 		t.Error(err)
 	}
 	// #nosec G101 this is just an empty test file
 	unReadableCAFile := "/tmp/unReadableCA"
-	_, err = os.Create(unReadableCAFile)
-	if err != nil {
+	if _, err := os.Create(unReadableCAFile); err != nil {
 		t.Error(err)
 	}
-	err = os.Chmod(unReadableCAFile, 0100)
-	if err != nil {
+	if err := os.Chmod(unReadableCAFile, 0100); err != nil {
 		t.Error(err)
 	}
 
 	defer func() {
-		if os.Remove(validCACertFile) != nil {
+		if err := os.Remove(validCACertFile); err != nil {
 			t.Error(err)
 		}
 	}()
 	defer func() {
-		if os.Remove(unReadableCAFile) != nil {
+		if err := os.Remove(unReadableCAFile); err != nil {
 			t.Error(err)
 		}
 	}()
@@ -270,7 +230,6 @@ func TestCheckParameters(t *testing.T) {
 	testCases := []TestCase{
 		{
 			name:          "All params are OK, no errors",
-			tokenFile:     validTokenFile,
 			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: validStorageFolder,
@@ -278,26 +237,7 @@ func TestCheckParameters(t *testing.T) {
 			expectPanic:   false,
 		},
 		{
-			name:          "Token file doesnt exist, error",
-			tokenFile:     invalidTokenFile,
-			caCertFile:    validCACertFile,
-			nodeIP:        "127.0.0.1",
-			storageFolder: validStorageFolder,
-			crioSocket:    validSocket,
-			expectPanic:   true,
-		},
-		{
-			name:          "Token file is not readeable, error",
-			tokenFile:     unReadableTokenFile,
-			caCertFile:    validCACertFile,
-			nodeIP:        "127.0.0.1",
-			storageFolder: validStorageFolder,
-			crioSocket:    validSocket,
-			expectPanic:   true,
-		},
-		{
 			name:          "nodeIP is an invalid IP, error",
-			tokenFile:     validTokenFile,
 			caCertFile:    validCACertFile,
 			nodeIP:        " 1000.40.210.253",
 			storageFolder: validStorageFolder,
@@ -306,7 +246,6 @@ func TestCheckParameters(t *testing.T) {
 		},
 		{
 			name:          "storageFolder doesnt exist, error",
-			tokenFile:     validTokenFile,
 			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: invalidStorageFolder,
@@ -315,7 +254,6 @@ func TestCheckParameters(t *testing.T) {
 		},
 		{
 			name:          "storageFolder is not writable, error",
-			tokenFile:     validTokenFile,
 			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: unWriteableStorageFolder,
@@ -324,7 +262,6 @@ func TestCheckParameters(t *testing.T) {
 		},
 		{
 			name:                 "crio socket file doesn't exist, error",
-			tokenFile:            validTokenFile,
 			caCertFile:           validCACertFile,
 			nodeIP:               "127.0.0.1",
 			storageFolder:        validStorageFolder,
@@ -333,8 +270,7 @@ func TestCheckParameters(t *testing.T) {
 			expectPanic:          true,
 		},
 		{
-			name:          "crio socket file doesn't exist, error",
-			tokenFile:     validTokenFile,
+			name:          "crio socket file doesn't exist, but not used",
 			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: validStorageFolder,
@@ -343,7 +279,6 @@ func TestCheckParameters(t *testing.T) {
 		},
 		{
 			name:                 "crio socket file is not writable, error",
-			tokenFile:            validTokenFile,
 			caCertFile:           validCACertFile,
 			nodeIP:               "127.0.0.1",
 			storageFolder:        validStorageFolder,
@@ -352,8 +287,7 @@ func TestCheckParameters(t *testing.T) {
 			expectPanic:          true,
 		},
 		{
-			name:          "CACert file doesnt exist, error",
-			tokenFile:     validTokenFile,
+			name:          "CACert file doesn't exist, error",
 			caCertFile:    invalidCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: validStorageFolder,
@@ -362,7 +296,6 @@ func TestCheckParameters(t *testing.T) {
 		},
 		{
 			name:          "CACert file is not readeable, error",
-			tokenFile:     validTokenFile,
 			caCertFile:    unReadableCAFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: validStorageFolder,
@@ -390,5 +323,5 @@ func checkPanic(t *testing.T, tc TestCase) {
 			}
 		}
 	}()
-	checkParameters(tc.tokenFile, tc.nodeIP, tc.storageFolder, tc.crioSocket, tc.preferCrioUnixSocket, tc.caCertFile)
+	checkParameters(tc.nodeIP, tc.storageFolder, tc.crioSocket, tc.preferCrioUnixSocket, tc.caCertFile)
 }
