@@ -6,13 +6,14 @@ import (
 )
 
 type TestCase struct {
-	name          string
-	tokenFile     string
-	caCertFile    string
-	nodeIP        string
-	storageFolder string
-	crioSocket    string
-	expectPanic   bool
+	name                 string
+	tokenFile            string
+	caCertFile           string
+	nodeIP               string
+	storageFolder        string
+	crioSocket           string
+	preferCrioUnixSocket bool
+	expectPanic          bool
 }
 
 func TestMakeCACertPool(t *testing.T) {
@@ -322,22 +323,33 @@ func TestCheckParameters(t *testing.T) {
 			expectPanic:   true,
 		},
 		{
-			name:          "crio socket file doesnt exist, error",
+			name:                 "crio socket file doesn't exist, error",
+			tokenFile:            validTokenFile,
+			caCertFile:           validCACertFile,
+			nodeIP:               "127.0.0.1",
+			storageFolder:        validStorageFolder,
+			crioSocket:           invalidSocket,
+			preferCrioUnixSocket: true,
+			expectPanic:          true,
+		},
+		{
+			name:          "crio socket file doesn't exist, error",
 			tokenFile:     validTokenFile,
 			caCertFile:    validCACertFile,
 			nodeIP:        "127.0.0.1",
 			storageFolder: validStorageFolder,
 			crioSocket:    invalidSocket,
-			expectPanic:   true,
+			expectPanic:   false,
 		},
 		{
-			name:          "crio socket file is not writable, error",
-			tokenFile:     validTokenFile,
-			caCertFile:    validCACertFile,
-			nodeIP:        "127.0.0.1",
-			storageFolder: validStorageFolder,
-			crioSocket:    unWriteableSocket,
-			expectPanic:   true,
+			name:                 "crio socket file is not writable, error",
+			tokenFile:            validTokenFile,
+			caCertFile:           validCACertFile,
+			nodeIP:               "127.0.0.1",
+			storageFolder:        validStorageFolder,
+			crioSocket:           unWriteableSocket,
+			preferCrioUnixSocket: true,
+			expectPanic:          true,
 		},
 		{
 			name:          "CACert file doesnt exist, error",
@@ -378,5 +390,5 @@ func checkPanic(t *testing.T, tc TestCase) {
 			}
 		}
 	}()
-	checkParameters(tc.tokenFile, tc.nodeIP, tc.storageFolder, tc.crioSocket, tc.caCertFile)
+	checkParameters(tc.tokenFile, tc.nodeIP, tc.storageFolder, tc.crioSocket, tc.preferCrioUnixSocket, tc.caCertFile)
 }

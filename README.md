@@ -6,7 +6,6 @@ List of required parameters to be passed to the agent:
 - `NODE_IP` environment variable: IP address of the node on which to perform the profiling
 - `--storage` flag : folder to which the pprof files are saved
 - `--tokenFile` flag : file containing token to be used for kubelet profiling http request
-- `--crioUnixSocket` flag : file referring to the unix socket to be used for CRIO profiling
 
 It accepts requests for the following endpoints:
 

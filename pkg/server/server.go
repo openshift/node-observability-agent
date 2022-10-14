@@ -16,12 +16,13 @@ var slog = logrus.WithField("module", "server")
 
 // Config holds the parameters necessary for the HTTP server, and agent in general need to run
 type Config struct {
-	Port           int
-	Token          string
-	CACerts        *x509.CertPool
-	NodeIP         string
-	StorageFolder  string
-	CrioUnixSocket string
+	Port                 int
+	Token                string
+	CACerts              *x509.CertPool
+	NodeIP               string
+	StorageFolder        string
+	CrioUnixSocket       string
+	CrioPreferUnixSocket bool
 }
 
 // Start starts HTTP server with parameters in cfg structure
