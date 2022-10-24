@@ -1,5 +1,5 @@
-FROM golang:1.17 as builder
-ARG VERSION="1.17"
+FROM golang:1.19 as builder
+ARG VERSION="1.19"
 
 WORKDIR /opt/app-root
 COPY . .

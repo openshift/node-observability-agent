@@ -1,6 +1,6 @@
 module github.com/openshift/node-observability-agent
 
-go 1.17
+go 1.19
 
 require (
 	github.com/golangci/golangci-lint v1.45.2
