@@ -19,7 +19,7 @@ include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
 IMG ?= node-observability-agent
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 
-GOLANGCI_LINT_BIN ?= go run -mod= github.com/golangci/golangci-lint/cmd/golangci-lint@v1.45.2
+GOLANGCI_LINT_BIN ?= go run -mod= github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.0
 
 .PHONY: verify
 verify:

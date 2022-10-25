@@ -16,13 +16,13 @@ type TestCase struct {
 }
 
 func TestMakeCACertPool(t *testing.T) {
-	// #nosec G101 this is just a test file, cotaining random text
+	// #nosec G101 this is just a test file, containing random text
 	invalidCACertFile := "/tmp/notACert"
 	err := os.WriteFile(invalidCACertFile, []byte("not a cert"), 0600)
 	if err != nil {
 		t.Error(err)
 	}
-	// #nosec G101 this is just a test file, cotaining random text
+	// #nosec G101 this is just a test file, containing random text
 	validCACertFile := "../../test_resources/kubelet-serving-ca.crt"
 
 	// #nosec G101 this is just an empty test file
@@ -81,6 +81,7 @@ func TestMakeCACertPool(t *testing.T) {
 				if err != nil {
 					t.Errorf("Did not expect error but got %s", err.Error())
 				}
+				// nolint no simple alternative
 				if len(cacert.Subjects()) == 0 {
 					t.Error("cacert pool should contain at least one subject")
 				}
@@ -89,10 +90,10 @@ func TestMakeCACertPool(t *testing.T) {
 	}
 }
 func TestReadTokenFile(t *testing.T) {
-	// #nosec G101 this is just a test file, cotaining random text
+	// #nosec G101 this is just a test file, containing random text
 	invalidTokenFile := "/tmp/noToken"
 	token := "abc"
-	// #nosec G101 this is just a test file, cotaining random text
+	// #nosec G101 this is just a test file, containing random text
 	validTokenFile := "/tmp/aToken"
 	err := os.WriteFile(validTokenFile, []byte(token), 0600)
 	if err != nil {
@@ -199,10 +200,10 @@ func TestCheckParameters(t *testing.T) {
 	defer os.Remove(validStorageFolder)
 	defer os.Remove(unWriteableStorageFolder)
 
-	// #nosec G101 this is just a test file, cotaining random text
+	// #nosec G101 this is just a test file, containing random text
 	invalidCACertFile := "/tmp/noCert"
 	cert := "A Fake Cert Content"
-	// #nosec G101 this is just a test file, cotaining random text
+	// #nosec G101 this is just a test file, containing random text
 	validCACertFile := "/tmp/aCA"
 	if err := os.WriteFile(validCACertFile, []byte(cert), 0400); err != nil {
 		t.Error(err)

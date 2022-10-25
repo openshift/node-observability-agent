@@ -4,7 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -103,7 +103,7 @@ func TestStatus(t *testing.T) {
 
 			defer resp.Body.Close()
 
-			bodyContent, err := ioutil.ReadAll(resp.Body)
+			bodyContent, err := io.ReadAll(resp.Body)
 			if err != nil {
 				t.Errorf("error reading response body : %v", err)
 			}
@@ -139,7 +139,7 @@ func TestSendUID(t *testing.T) {
 			if resp.StatusCode != tc.expectedCode {
 				t.Errorf("Expected status code %d but was %d", tc.expectedCode, resp.StatusCode)
 			}
-			bodyContent, err := ioutil.ReadAll(resp.Body)
+			bodyContent, err := io.ReadAll(resp.Body)
 			if err != nil {
 				t.Errorf("error reading response body : %v", err)
 			}
@@ -486,7 +486,7 @@ func cleanup(t *testing.T) {
 
 func readRunFromFile(fileName string) (runs.Run, error) {
 	var arun *runs.Run = &runs.Run{}
-	contents, err := ioutil.ReadFile(fileName)
+	contents, err := os.ReadFile(fileName)
 	if err != nil {
 		return *arun, err
 	}
@@ -498,7 +498,7 @@ func readRunFromFile(fileName string) (runs.Run, error) {
 }
 
 func makeCACertPool() *x509.CertPool {
-	content, err := ioutil.ReadFile("../../test_resources/kubelet-serving-ca.crt")
+	content, err := os.ReadFile("../../test_resources/kubelet-serving-ca.crt")
 	if err != nil {
 		panic("Unable to load CACerts file")
 	}
