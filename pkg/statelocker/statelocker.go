@@ -3,7 +3,6 @@ package statelocker
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"sync"
 
@@ -111,7 +110,7 @@ func (m *StateLock) errorFileExists() bool {
 
 func (m *StateLock) readUIDFromFile() (uuid.UUID, error) {
 	var arun *runs.Run = &runs.Run{}
-	contents, err := ioutil.ReadFile(m.errorFilePath)
+	contents, err := os.ReadFile(m.errorFilePath)
 	if err != nil {
 		return uuid.Nil, err
 	}

@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	"github.com/openshift/node-observability-agent/pkg/runs"
 )
 
@@ -47,7 +50,7 @@ func TestSendHTTPProfileRequest(t *testing.T) {
 			expectedRun: runs.ProfilingRun{
 				Type:       runs.KubeletRun,
 				Successful: false,
-				Error:      fmt.Sprintf("failed sending profiling request: %s %q: fake error", strings.Title(fakeMethod), fakeURL),
+				Error:      fmt.Sprintf("failed sending profiling request: %s %q: fake error", cases.Title(language.Und).String(fakeMethod), fakeURL),
 			},
 		},
 		{

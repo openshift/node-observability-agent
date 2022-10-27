@@ -4,7 +4,6 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"syscall"
@@ -107,7 +106,7 @@ func checkParameters(nodeIP, storageFolder, crioUnixSocket string, crioPreferUni
 }
 
 func readTokenFile(tokenFile string) (string, error) {
-	content, err := ioutil.ReadFile(tokenFile)
+	content, err := os.ReadFile(tokenFile)
 	if err != nil {
 		return "", err
 	}
@@ -118,8 +117,7 @@ func readTokenFile(tokenFile string) (string, error) {
 }
 
 func makeCACertPool(caCertFile string) (*x509.CertPool, error) {
-
-	content, err := ioutil.ReadFile(caCertFile)
+	content, err := os.ReadFile(caCertFile)
 	if err != nil {
 		return nil, err
 	}
