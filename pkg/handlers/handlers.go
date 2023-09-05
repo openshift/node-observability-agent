@@ -45,10 +45,20 @@ func NewHandlers(token string, storageFolder string, crioUnixSocket string, node
 	}
 }
 
+// NewMetricsHandlers creates a new instance of Handlers from the given parameters
+func NewMetricsHandlers(storageFolder string, nodeIP string) *Handlers {
+	aStateLocker := statelocker.NewStateLock(filepath.Join(storageFolder, "agent."+string(errorFile)))
+	return &Handlers{
+		NodeIP:        nodeIP,
+		StorageFolder: storageFolder,
+		stateLocker:   aStateLocker,
+	}
+}
+
 const (
 	ready                   = "Service is ready"
 	httpRespErrMsg          = "unable to send response"
-	timeout        int      = 35
+	baseTimeout    int      = 35
 	logFile        fileType = "log"
 	errorFile      fileType = "err"
 )
@@ -169,7 +179,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		{
 
 			// Channel for collecting results of profiling
-			runResultsChan := make(chan runs.ProfilingRun)
+			runResultsChan := make(chan runs.ExecutionRun)
 
 			// Launch both profilings in parallel as well as the routine to wait for results
 			go func() {
@@ -188,7 +198,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 				runResultsChan <- h.profileCrio(uid.String(), &connector)
 			}()
 
-			go h.processResults(uid, runResultsChan)
+			go h.processResults(uid, runResultsChan, baseTimeout)
 			// Send a HTTP 200 straight away
 			err := sendUID(w, uid)
 			if err != nil {
@@ -197,12 +207,72 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
 }
-func (h *Handlers) processResults(uid uuid.UUID, runResultsChan chan runs.ProfilingRun) {
+
+// HandleMetrics is called when the agent receives an HTTP request on endpoint /metrics
+// After checking the agent is not in error, and that no previous profiling is still ongoing,
+// it triggers the embedded script in a separate goroutines, and launches a separate
+// function to process the results in a goroutine as well
+func (h *Handlers) HandleMetrics(w http.ResponseWriter, r *http.Request) {
+	uid, state, err := h.stateLocker.Lock()
+	if err != nil {
+		http.Error(w, "service is either busy or in error, try again",
+			http.StatusInternalServerError)
+		hlog.Error(err)
+		return
+	}
+
+	switch state {
+	case statelocker.InError:
+		{
+			err := respondBusyOrError(uid.String(), w, true)
+			if err != nil {
+				http.Error(w, httpRespErrMsg,
+					http.StatusInternalServerError)
+				hlog.Error(httpRespErrMsg)
+				return
+			}
+			return
+		}
+	case statelocker.Taken:
+		{
+			err := respondBusyOrError(uid.String(), w, false)
+			if err != nil {
+				http.Error(w, httpRespErrMsg,
+					http.StatusInternalServerError)
+				hlog.Error(httpRespErrMsg)
+				return
+			}
+			return
+		}
+	case statelocker.Free:
+		{
+
+			// Channel for collecting results of metrics
+			runResultsChan := make(chan runs.ExecutionRun)
+
+			// Launch metrics script as the routine to wait for results
+			go func() {
+				connector := connectors.Connector{}
+				connector.Prepare("sh", []string{"-c", "scripts/all_metrics.sh"})
+				runResultsChan <- h.metrics(uid.String(), &connector)
+			}()
+
+			go h.processResults(uid, runResultsChan, 7200)
+			// Send a HTTP 200 straight away
+			err := sendUID(w, uid)
+			if err != nil {
+				hlog.Error(err)
+				return
+			}
+		}
+	}
+}
+
+func (h *Handlers) processResults(uid uuid.UUID, runResultsChan chan runs.ExecutionRun, timeout int) {
 	arun := runs.Run{
 		ID:            uid,
-		ProfilingRuns: []runs.ProfilingRun{},
+		ProfilingRuns: []runs.ExecutionRun{},
 	}
 	// unlock as soon as finished processing
 	defer func() {
@@ -213,27 +283,27 @@ func (h *Handlers) processResults(uid uuid.UUID, runResultsChan chan runs.Profil
 		close(runResultsChan)
 	}()
 	// wait for the results
-	arun.ProfilingRuns = []runs.ProfilingRun{}
-	isTimeout := false
-	for nb := 0; nb < 2 && !isTimeout; {
-		select {
-		case pr := <-runResultsChan:
-			nb++
-			arun.ProfilingRuns = append(arun.ProfilingRuns, pr)
-		case <-time.After(time.Second * time.Duration(timeout)):
-			//timeout! dont wait anymore
-			prInTimeout := runs.ProfilingRun{
-				Type:       runs.UnknownRun,
-				Successful: false,
-				BeginTime:  time.Now(),
-				EndTime:    time.Now(),
-				Error:      fmt.Sprintf("timeout after waiting %ds", timeout),
-			}
-			prInTimeout.Error = fmt.Sprintf("timeout after waiting %ds", timeout)
-			arun.ProfilingRuns = append(arun.ProfilingRuns, prInTimeout)
-			isTimeout = true
+	arun.ProfilingRuns = []runs.ExecutionRun{}
+	//isTimeout := false
+	//for nb := 0; nb < 2 && !isTimeout; {
+	select {
+	case pr := <-runResultsChan:
+		//nb++
+		arun.ProfilingRuns = append(arun.ProfilingRuns, pr)
+	case <-time.After(time.Second * time.Duration(timeout)):
+		//timeout! dont wait anymore
+		prInTimeout := runs.ExecutionRun{
+			Type:       runs.UnknownRun,
+			Successful: false,
+			BeginTime:  time.Now(),
+			EndTime:    time.Now(),
+			Error:      fmt.Sprintf("timeout after waiting %ds", timeout),
 		}
+		prInTimeout.Error = fmt.Sprintf("timeout after waiting %ds", timeout)
+		arun.ProfilingRuns = append(arun.ProfilingRuns, prInTimeout)
+		//isTimeout = true
 	}
+	//}
 
 	// Process the results
 	var errorMessage bytes.Buffer

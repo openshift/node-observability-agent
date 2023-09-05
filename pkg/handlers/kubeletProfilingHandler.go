@@ -14,8 +14,8 @@ import (
 // ProfileKubelet calls /debug/pprof/profile on the h.NodeIP, thus triggering a kubelet
 // profiling on that node.
 // This call requires an Authorization header, to which the h.Token is passed as Bearer token
-func (h *Handlers) profileKubelet(uid string, client *http.Client) runs.ProfilingRun {
-	run := runs.ProfilingRun{
+func (h *Handlers) profileKubelet(uid string, client *http.Client) runs.ExecutionRun {
+	run := runs.ExecutionRun{
 		Type:      runs.KubeletRun,
 		BeginTime: time.Now(),
 	}

@@ -19,7 +19,7 @@ func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req), nil
 }
 
-//NewHTTPTestClient returns *http.Client with Transport replaced to avoid making real calls
+// NewHTTPTestClient returns *http.Client with Transport replaced to avoid making real calls
 func NewHTTPTestClient(fn RoundTripFunc) *http.Client {
 	return &http.Client{
 		Transport: RoundTripFunc(fn),
@@ -31,7 +31,7 @@ func TestProfileKubelet(t *testing.T) {
 		name     string
 		handlers *Handlers
 		client   *http.Client
-		expected runs.ProfilingRun
+		expected runs.ExecutionRun
 	}{
 		{
 			name:     "KubeletProfiling passes, ProfileRun returned",
@@ -46,7 +46,7 @@ func TestProfileKubelet(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			expected: runs.ProfilingRun{
+			expected: runs.ExecutionRun{
 				Type:       runs.KubeletRun,
 				Successful: true,
 				Error:      "",
@@ -65,7 +65,7 @@ func TestProfileKubelet(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			expected: runs.ProfilingRun{
+			expected: runs.ExecutionRun{
 				Type:       runs.KubeletRun,
 				Successful: false,
 				Error:      fmt.Sprintf("error with HTTP request for kubelet profiling https://%s:10250/debug/pprof/profile: statusCode %d", "127.0.0.1", http.StatusUnauthorized),
@@ -84,7 +84,7 @@ func TestProfileKubelet(t *testing.T) {
 					Header: make(http.Header),
 				}
 			}),
-			expected: runs.ProfilingRun{
+			expected: runs.ExecutionRun{
 				Type:       runs.KubeletRun,
 				Successful: false,
 				Error:      fmt.Sprintf("error fileHandler - kubelet profiling for node %s: open non-existent-path/kubelet-1234.pprof: no such file or directory", "127.0.0.1"),

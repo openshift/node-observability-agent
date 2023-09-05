@@ -19,6 +19,7 @@ var (
 	port          = flag.Int("port", 9000, "server port to listen on (default: 9000)")
 	storageFolder = flag.String("storage", "/tmp/pprofs/", "folder to which the pprof files are saved")
 	tokenFile     = flag.String("tokenFile", "", "file containing token to be used for kubelet profiling http request")
+	mode          = flag.String("mode", "profile", "mode selection either 'profile' or 'metrics'")
 	crioSocket    = flag.String("crioUnixSocket", "/var/run/crio/crio.sock", "file referring to the unix socket to be used for CRIO profiling")
 	logLevel      = flag.String("loglevel", "info", "log level")
 	versionFlag   = flag.Bool("v", false, "print version")
@@ -44,11 +45,14 @@ func main() {
 	log.SetLevel(lvl)
 	log.Infof("Starting %s at log level %s", ver.MakeVersionString(), *logLevel)
 
-	checkParameters(*tokenFile, node, *storageFolder, *crioSocket)
+	checkParameters(*mode, *tokenFile, node, *storageFolder, *crioSocket)
 
-	token, err := readTokenFile(*tokenFile)
-	if err != nil {
-		panic("Unable to read token file, or token is empty :" + err.Error())
+	var token string
+	if *mode == "profile" {
+		token, err = readTokenFile(*tokenFile)
+		if err != nil {
+			panic("Unable to read token file, or token is empty :" + err.Error())
+		}
 	}
 
 	server.Start(server.Config{
@@ -57,27 +61,33 @@ func main() {
 		StorageFolder:  *storageFolder,
 		CrioUnixSocket: *crioSocket,
 		NodeIP:         node,
+		Mode:           *mode,
 	})
 }
 
-func checkParameters(tokenFile string, nodeIP string, storageFolder string, crioUnixSocket string) {
-	//check on configs that are passed along before starting up the server
-	//1. token is readable
-	_, err := readTokenFile(tokenFile)
-	if err != nil {
-		panic("Unable to read token file")
+func checkParameters(mode string, tokenFile string, nodeIP string, storageFolder string, crioUnixSocket string) {
+	// CFE-912 added scripts to handle RFE-2052. This requires a mode flag to switch between
+	// profiling (existing functionality for crio and kubelet) or metrics (new functionality)
+	if mode == "profile" {
+		//check on configs that are passed along before starting up the server
+		// token is readable
+		_, err := readTokenFile(tokenFile)
+		if err != nil {
+			panic("Unable to read token file")
+		}
+		// CRIO socket is accessible in readwrite
+		if syscall.Access(crioUnixSocket, syscall.O_RDWR) != nil {
+			panic("Unable to access the the crio socket - no write permission :" + crioUnixSocket)
+		}
 	}
-	//2. nodeIP is found
+
+	// nodeIP is found
 	if nodeIP == "" || net.ParseIP(nodeIP) == nil {
 		panic("Environment variable NODE_IP not found, or doesnt contain a valid IP address")
 	}
-	//3. StorageFolder is accessible in readwrite
+	// StorageFolder is accessible in readwrite
 	if syscall.Access(storageFolder, syscall.O_RDWR) != nil {
 		panic("Unable to access the folder specified for saving the profiling data - no write permission :" + storageFolder)
-	}
-	//4. CRIO socket is accessible in readwrite
-	if syscall.Access(crioUnixSocket, syscall.O_RDWR) != nil {
-		panic("Unable to access the the crio socket - no write permission :" + crioUnixSocket)
 	}
 }
 

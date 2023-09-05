@@ -11,6 +11,7 @@ type TestCase struct {
 	nodeIP        string
 	storageFolder string
 	crioSocket    string
+	mode          string
 	expectPanic   bool
 }
 
@@ -163,6 +164,7 @@ func TestCheckParameters(t *testing.T) {
 			storageFolder: validStorageFolder,
 			crioSocket:    validSocket,
 			expectPanic:   false,
+			mode:          "profile",
 		},
 		{
 			name:          "Token file doesnt exist, error",
@@ -171,6 +173,7 @@ func TestCheckParameters(t *testing.T) {
 			storageFolder: validStorageFolder,
 			crioSocket:    validSocket,
 			expectPanic:   true,
+			mode:          "profile",
 		},
 		{
 			name:          "Token file is not readeable, error",
@@ -179,6 +182,7 @@ func TestCheckParameters(t *testing.T) {
 			storageFolder: validStorageFolder,
 			crioSocket:    validSocket,
 			expectPanic:   true,
+			mode:          "profile",
 		},
 		// {
 		// 	name: "Token file is empty, error",
@@ -190,6 +194,7 @@ func TestCheckParameters(t *testing.T) {
 			storageFolder: validStorageFolder,
 			crioSocket:    validSocket,
 			expectPanic:   true,
+			mode:          "profile",
 		},
 		{
 			name:          "storageFolder doesnt exist, error",
@@ -198,6 +203,7 @@ func TestCheckParameters(t *testing.T) {
 			storageFolder: invalidStorageFolder,
 			crioSocket:    validSocket,
 			expectPanic:   true,
+			mode:          "profile",
 		},
 		{
 			name:          "storageFolder is not writable, error",
@@ -206,6 +212,7 @@ func TestCheckParameters(t *testing.T) {
 			storageFolder: unWriteableStorageFolder,
 			crioSocket:    validSocket,
 			expectPanic:   true,
+			mode:          "profile",
 		},
 		{
 			name:          "crio socket file doesnt exist, error",
@@ -214,6 +221,7 @@ func TestCheckParameters(t *testing.T) {
 			storageFolder: validStorageFolder,
 			crioSocket:    invalidSocket,
 			expectPanic:   true,
+			mode:          "profile",
 		},
 		{
 			name:          "crio socket file is not writable, error",
@@ -222,6 +230,7 @@ func TestCheckParameters(t *testing.T) {
 			storageFolder: validStorageFolder,
 			crioSocket:    unWriteableSocket,
 			expectPanic:   true,
+			mode:          "profile",
 		},
 	}
 
@@ -244,5 +253,5 @@ func checkPanic(t *testing.T, tc TestCase) {
 			}
 		}
 	}()
-	checkParameters(tc.tokenFile, tc.nodeIP, tc.storageFolder, tc.crioSocket)
+	checkParameters(tc.mode, tc.tokenFile, tc.nodeIP, tc.storageFolder, tc.crioSocket)
 }

@@ -12,10 +12,11 @@ const (
 	KubeletRun RunType = "Kubelet"
 	CrioRun    RunType = "CRIO"
 	UnknownRun RunType = "Unknown"
+	MetricsRun RunType = "Metrics"
 )
 
-// ProfilingRun holds the status of a CRIO or Kubelet Profiling execution
-type ProfilingRun struct {
+// ExecutionRun holds the status of a CRIO,Kubelet, Metrics execution
+type ExecutionRun struct {
 	Type       RunType
 	Successful bool
 	BeginTime  time.Time
@@ -26,5 +27,5 @@ type ProfilingRun struct {
 // Run holds the status of a request to the node observability agent
 type Run struct {
 	ID            uuid.UUID
-	ProfilingRuns []ProfilingRun
+	ProfilingRuns []ExecutionRun
 }

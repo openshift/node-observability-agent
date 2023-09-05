@@ -11,10 +11,10 @@ import (
 // ProfileCrio calls /debug/pprof/profile on the h.NodeIP, through the unix socket,
 // thus triggering a CRIO profiling on that node.
 // This call requires access to the host socket, which is passed to the agent in parameter crioSocket
-func (h *Handlers) profileCrio(uid string, cmd connectors.CmdWrapper) runs.ProfilingRun {
+func (h *Handlers) profileCrio(uid string, cmd connectors.CmdWrapper) runs.ExecutionRun {
 	//curl --unix-socket /var/run/crio/crio.sock http://localhost/debug/pprof/profile > /mnt/prof.out
 
-	run := runs.ProfilingRun{
+	run := runs.ExecutionRun{
 		Type:      runs.CrioRun,
 		BeginTime: time.Now(),
 	}

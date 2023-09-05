@@ -115,7 +115,7 @@ func TestSetError(t *testing.T) {
 			previousState: Taken,
 			runInError: runs.Run{
 				ID: uuid.MustParse(validUID),
-				ProfilingRuns: []runs.ProfilingRun{
+				ProfilingRuns: []runs.ExecutionRun{
 					{
 						Type:       runs.KubeletRun,
 						Successful: false,
@@ -193,7 +193,7 @@ func TestUnlock(t *testing.T) {
 			previousState: InError,
 			runInError: runs.Run{
 				ID:            uuid.MustParse(validUID),
-				ProfilingRuns: []runs.ProfilingRun{},
+				ProfilingRuns: []runs.ExecutionRun{},
 			},
 			expectedError: false,
 			expectedUID:   uuid.Nil,
@@ -270,7 +270,7 @@ func TestLockInfo(t *testing.T) {
 			previousState: InError,
 			runInError: runs.Run{
 				ID:            uuid.MustParse(validUID),
-				ProfilingRuns: []runs.ProfilingRun{},
+				ProfilingRuns: []runs.ExecutionRun{},
 			},
 			expectedError: false,
 			expectedState: InError,

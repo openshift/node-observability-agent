@@ -253,52 +253,52 @@ func TestHandleProfiling(t *testing.T) {
 func TestProcessResults(t *testing.T) {
 	h := NewHandlers("abc", "/tmp", "/tmp/fakeSocket", "127.0.0.1")
 
-	crioRunOK := runs.ProfilingRun{
+	crioRunOK := runs.ExecutionRun{
 		Type:       runs.CrioRun,
 		Successful: true,
 		BeginTime:  time.Now(),
 		EndTime:    time.Now(),
 		Error:      "",
 	}
-	crioRunKO := runs.ProfilingRun{
+	crioRunKO := runs.ExecutionRun{
 		Type:       runs.CrioRun,
 		Successful: false,
 		BeginTime:  time.Now(),
 		EndTime:    time.Now(),
 		Error:      "fake error",
 	}
-	kubeletRunOK := runs.ProfilingRun{
+	kubeletRunOK := runs.ExecutionRun{
 		Type:       runs.KubeletRun,
 		Successful: true,
 		BeginTime:  time.Now(),
 		EndTime:    time.Now(),
 		Error:      "",
 	}
-	kubeletRunKO := runs.ProfilingRun{
+	kubeletRunKO := runs.ExecutionRun{
 		Type:       runs.KubeletRun,
 		Successful: false,
 		BeginTime:  time.Now(),
 		EndTime:    time.Now(),
 		Error:      "fake error",
 	}
-	chanAllOK := make(chan runs.ProfilingRun, 2)
+	chanAllOK := make(chan runs.ExecutionRun, 2)
 	chanAllOK <- kubeletRunOK
 	chanAllOK <- crioRunOK
 
-	chanCrioKO := make(chan runs.ProfilingRun, 2)
+	chanCrioKO := make(chan runs.ExecutionRun, 2)
 	chanCrioKO <- kubeletRunOK
 	chanCrioKO <- crioRunKO
 
-	chanKubeletKO := make(chan runs.ProfilingRun, 2)
+	chanKubeletKO := make(chan runs.ExecutionRun, 2)
 	chanKubeletKO <- kubeletRunKO
 	chanKubeletKO <- crioRunOK
 
-	chanOnlyCrio := make(chan runs.ProfilingRun, 1)
+	chanOnlyCrio := make(chan runs.ExecutionRun, 1)
 	chanOnlyCrio <- crioRunOK
 
 	testCases := []struct {
 		name                   string
-		channel                chan runs.ProfilingRun
+		channel                chan runs.ExecutionRun
 		expectedLock           bool
 		expectedError          bool
 		expectedTimeout        bool
@@ -361,7 +361,7 @@ func TestProcessResults(t *testing.T) {
 				t.Errorf("Unexpected error : %v", err)
 			}
 			defer cleanup(t)
-			h.processResults(uuid.MustParse(validUID), tc.channel)
+			h.processResults(uuid.MustParse(validUID), tc.channel, 10)
 			uid, s, err := h.stateLocker.LockInfo()
 			if err != nil {
 				t.Errorf("unexpected error : %v", err)

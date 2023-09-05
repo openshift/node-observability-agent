@@ -10,6 +10,7 @@ import (
 )
 
 const loopback = "127.0.0.1"
+const allInterface = "0.0.0.0"
 
 var slog = logrus.WithField("module", "server")
 
@@ -20,6 +21,7 @@ type Config struct {
 	NodeIP         string
 	StorageFolder  string
 	CrioUnixSocket string
+	Mode           string
 }
 
 // Start starts HTTP server with parameters in cfg structure
@@ -34,10 +36,10 @@ func Start(cfg Config) {
 
 	httpServer := &http.Server{
 		Handler:      router,
-		Addr:         fmt.Sprintf("%s:%d", loopback, cfg.Port),
+		Addr:         fmt.Sprintf("%s:%d", allInterface, cfg.Port),
 		TLSConfig:    tlsConfig,
-		ReadTimeout:  40 * time.Second,
-		WriteTimeout: 40 * time.Second,
+		ReadTimeout:  45 * time.Second,
+		WriteTimeout: 45 * time.Second,
 	}
 
 	slog.Infof("listening on http://%s:%d", loopback, cfg.Port)

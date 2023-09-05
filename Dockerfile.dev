@@ -1,0 +1,22 @@
+FROM registry.access.redhat.com/ubi8/go-toolset:1.16.12-4 as builder
+
+ENV VERSION="1.17"
+
+WORKDIR /opt/app-root
+COPY . .
+
+RUN  GO111MODULE=on GOFLAGS=-mod=vendor go build -trimpath -ldflags "-X github.com/openshift/node-observability-agent/pkg/version.versionFromGit="v0.0.0-unknown" -X github.com/openshift/node-observability-agent/pkg/version.commitFromGit="00801d1" -X github.com/openshift/node-observability-agent/pkg/version.gitTreeState="dirty" -X github.com/openshift/node-observability-agent/pkg/version.buildDate="2023-08-29T11:26:31Z" " -o 'node-observability-agent' github.com/openshift/node-observability-agent/cmd/node-observability-agent
+
+#FROM registry.fedoraproject.org/fedora-minimal:30
+FROM registry.access.redhat.com/ubi8/ubi-init
+
+#RUN microdnf install -y tar procps-ng perf psmisc hostname iproute sysstat iotop conntrack-tools ethtool numactl net-tools util-linux
+RUN dnf install -y tar procps-ng perf psmisc hostname iproute sysstat iotop conntrack-tools ethtool numactl net-tools util-linux
+
+COPY --from=builder /opt/app-root/node-observability-agent ./
+COPY scripts/* /usr/local/bin
+COPY ./uid_entrypoint.sh ./uid_entrypoint.sh
+
+# ENTRYPOINT ["sh", "-c", "./node-observability-agent --tokenFile /var/run/secrets/kubernetes.io/serviceaccount/token --storage /host/tmp/pprofs/ --node $NODE_IP"]
+# execute using args (see deplyment) "python3" "/opt/entrypoint.py" "--remote-worker-api" "--composer-api" "--shutdown-wait-period" "15"]
+ENTRYPOINT ["./uid_entrypoint.sh"]
