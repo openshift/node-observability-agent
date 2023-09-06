@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/openshift/node-observability-agent/pkg/connectors"
 	"github.com/openshift/node-observability-agent/pkg/runs"
 	"github.com/openshift/node-observability-agent/pkg/statelocker"
 )
@@ -275,52 +276,52 @@ func TestHandleProfilingStateMgmt(t *testing.T) {
 func TestProcessResults(t *testing.T) {
 	h := NewHandlers("abc", makeCACertPool(), "/tmp", "/tmp/fakeSocket", "127.0.0.1", true)
 
-	crioRunOK := runs.ProfilingRun{
+	crioRunOK := runs.ExecutionRun{
 		Type:       runs.CrioRun,
 		Successful: true,
 		BeginTime:  time.Now(),
 		EndTime:    time.Now(),
 		Error:      "",
 	}
-	crioRunKO := runs.ProfilingRun{
+	crioRunKO := runs.ExecutionRun{
 		Type:       runs.CrioRun,
 		Successful: false,
 		BeginTime:  time.Now(),
 		EndTime:    time.Now(),
 		Error:      "fake error",
 	}
-	kubeletRunOK := runs.ProfilingRun{
+	kubeletRunOK := runs.ExecutionRun{
 		Type:       runs.KubeletRun,
 		Successful: true,
 		BeginTime:  time.Now(),
 		EndTime:    time.Now(),
 		Error:      "",
 	}
-	kubeletRunKO := runs.ProfilingRun{
+	kubeletRunKO := runs.ExecutionRun{
 		Type:       runs.KubeletRun,
 		Successful: false,
 		BeginTime:  time.Now(),
 		EndTime:    time.Now(),
 		Error:      "fake error",
 	}
-	chanAllOK := make(chan runs.ProfilingRun, 2)
+	chanAllOK := make(chan runs.ExecutionRun, 2)
 	chanAllOK <- kubeletRunOK
 	chanAllOK <- crioRunOK
 
-	chanCrioKO := make(chan runs.ProfilingRun, 2)
+	chanCrioKO := make(chan runs.ExecutionRun, 2)
 	chanCrioKO <- kubeletRunOK
 	chanCrioKO <- crioRunKO
 
-	chanKubeletKO := make(chan runs.ProfilingRun, 2)
+	chanKubeletKO := make(chan runs.ExecutionRun, 2)
 	chanKubeletKO <- kubeletRunKO
 	chanKubeletKO <- crioRunOK
 
-	chanOnlyCrio := make(chan runs.ProfilingRun, 1)
+	chanOnlyCrio := make(chan runs.ExecutionRun, 1)
 	chanOnlyCrio <- crioRunOK
 
 	testCases := []struct {
 		name                   string
-		channel                chan runs.ProfilingRun
+		channel                chan runs.ExecutionRun
 		expectedLock           bool
 		expectedError          bool
 		expectedTimeout        bool
@@ -383,7 +384,7 @@ func TestProcessResults(t *testing.T) {
 				t.Errorf("Unexpected error : %v", err)
 			}
 			defer cleanup(t)
-			h.processResults(uuid.MustParse(validUID), tc.channel)
+			h.processResults(uuid.MustParse(validUID), tc.channel, 35)
 			uid, s, err := h.stateLocker.LockInfo()
 			if err != nil {
 				t.Errorf("unexpected error : %v", err)
@@ -406,7 +407,7 @@ func TestProcessResults(t *testing.T) {
 				if theRun.ID.String() != tc.expectedRunID {
 					t.Errorf("Expected log file /tmp/%s.log to contain run ID %s but was %s", validUID, theRun.ID.String(), tc.expectedRunID)
 				}
-				for _, aProfilingRun := range theRun.ProfilingRuns {
+				for _, aProfilingRun := range theRun.ExecutionRuns {
 					if aProfilingRun.Type == runs.CrioRun {
 						if aProfilingRun.Successful != tc.expectedCrioSuccess {
 							t.Errorf("Expected log file /tmp/%s.log to contain crio run success = %t, but was %t", validUID, tc.expectedCrioSuccess, aProfilingRun.Successful)
@@ -428,7 +429,7 @@ func TestProcessResults(t *testing.T) {
 					if theRun.ID.String() != tc.expectedRunID {
 						t.Errorf("Expected log file /tmp/agent.err to contain run ID %s but was %s", theRun.ID.String(), tc.expectedRunID)
 					}
-					for _, aProfilingRun := range theRun.ProfilingRuns {
+					for _, aProfilingRun := range theRun.ExecutionRuns {
 						if aProfilingRun.Type == runs.CrioRun {
 							if aProfilingRun.Successful != tc.expectedCrioSuccess {
 								t.Errorf("Expected log file /tmp/agent.err to contain crio run success = %t, but was %t", tc.expectedCrioSuccess, aProfilingRun.Successful)
@@ -467,6 +468,170 @@ func TestOutputFilePaths(t *testing.T) {
 	if expected, got := "/fakedir/agent.err", h.errorOutputFilePath(); expected != got {
 		t.Errorf("Wrong log output path, expected: %q, but got: %q", expected, got)
 	}
+}
+
+func TestHandleScripting(t *testing.T) {
+	errorFile := "/tmp/agent.err"
+	handlingPollInterval := 100 * time.Millisecond
+	handlingPollMaxRetry := 5
+	serverState := "OK"
+	errFileContent := "{\"ID\":\"" + validUID + "\",\"ExecutionRuns\":[{\"Type\":\"Kubelet\",\"Successful\":false,\"BeginTime\":\"2022-03-03T10:10:17.188097819Z\",\"EndTime\":\"2022-03-03T10:10:47.211572681Z\",\"Error\":\"fake error\"},{\"Type\":\"CRIO\",\"Successful\":true,\"BeginTime\":\"2022-03-03T10:10:17.188499431Z\",\"EndTime\":\"2022-03-03T10:10:47.215840909Z\",\"Error\":null}]}"
+	expectedCode := http.StatusOK
+	expectedState := statelocker.Taken
+	expectedError := false
+
+	// cover the pass scenario
+	t.Run("ScriptingHandlers : should pass", func(t *testing.T) {
+		h := &Handlers{
+			NodeIP:        "TEST",
+			StorageFolder: "/tmp",
+			Connector:     &connectors.FakeConnector{Flag: ""},
+		}
+		h.stateLocker = statelocker.NewStateLock(h.errorOutputFilePath())
+
+		r := httptest.NewRequest("GET", "http://localhost/node-observability-scripting", nil)
+		w := httptest.NewRecorder()
+		if serverState == "busy" {
+			id, state, err := h.stateLocker.Lock()
+			if err != nil {
+				t.Errorf("failed to lock the state: %v", err)
+			}
+			t.Logf("state changed: %s, run ID: %s", state, id)
+		}
+		if serverState == "error" {
+			// prepare an error file
+			err := os.WriteFile(errorFile, []byte(errFileContent), 0600)
+			if err != nil {
+				t.Error(err)
+			}
+			t.Logf("error file updated: %q", errFileContent)
+		}
+
+		h.HandleScripting(w, r)
+		resp := w.Result()
+
+		if resp.StatusCode != expectedCode {
+			t.Errorf("expected status code %d but was %d", expectedCode, resp.StatusCode)
+		}
+		uid, s, err := h.stateLocker.LockInfo()
+		if expectedState != s {
+			t.Errorf("expected state to become %s, but was %s", expectedState, s)
+		}
+
+		if expectedError && err == nil {
+			t.Error("error was expected but none was found")
+		}
+		if !expectedError && err != nil {
+			t.Errorf("unexpected error : %v", err)
+		}
+		if expectedState != statelocker.InError {
+			if uid == uuid.Nil {
+				t.Error("uid was empty when it shouldnt")
+			}
+		}
+
+		// wait for the end of the profiling to avoid test collisions
+		// unless no profiling was run: when taken state was set by the test itself
+
+		if serverState == "busy" {
+			return
+		}
+
+		for i := 0; i < handlingPollMaxRetry; i++ {
+			_, s, _ = h.stateLocker.LockInfo()
+			switch s {
+			case statelocker.Free:
+				t.Logf("script handling finished")
+				return
+			case statelocker.InError:
+				t.Logf("script handling finished")
+				if err := os.Remove(errorFile); err != nil {
+					t.Fatalf("unable to remove file: %v", err)
+				}
+				t.Logf("error file removed")
+				return
+			}
+			time.Sleep(handlingPollInterval)
+		}
+		t.Errorf("timed out waiting for the end of script handling")
+	})
+
+	// cover the fail scenario
+	t.Run("ScriptingHandlers : should fail", func(t *testing.T) {
+		h := &Handlers{
+			NodeIP:        "TEST",
+			StorageFolder: "/tmp",
+			Connector:     &connectors.FakeConnector{Flag: connectors.ScriptErr},
+		}
+		h.stateLocker = statelocker.NewStateLock(h.errorOutputFilePath())
+
+		r := httptest.NewRequest("GET", "http://localhost/node-observability-scripting", nil)
+		w := httptest.NewRecorder()
+		if serverState == "busy" {
+			id, state, err := h.stateLocker.Lock()
+			if err != nil {
+				t.Errorf("failed to lock the state: %v", err)
+			}
+			t.Logf("state changed: %s, run ID: %s", state, id)
+		}
+		if serverState == "error" {
+			// prepare an error file
+			err := os.WriteFile(errorFile, []byte(errFileContent), 0600)
+			if err != nil {
+				t.Error(err)
+			}
+			t.Logf("error file updated: %q", errFileContent)
+		}
+
+		h.HandleScripting(w, r)
+		resp := w.Result()
+
+		if resp.StatusCode != expectedCode {
+			t.Errorf("expected status code %d but was %d", expectedCode, resp.StatusCode)
+		}
+		uid, s, err := h.stateLocker.LockInfo()
+		if expectedState != s {
+			t.Errorf("expected state to become %s, but was %s", expectedState, s)
+		}
+
+		if expectedError && err == nil {
+			t.Error("error was expected but none was found")
+		}
+		if !expectedError && err != nil {
+			t.Errorf("unexpected error : %v", err)
+		}
+		if expectedState != statelocker.InError {
+			if uid == uuid.Nil {
+				t.Error("uid was empty when it shouldnt")
+			}
+		}
+
+		// wait for the end of the profiling to avoid test collisions
+		// unless no profiling was run: when taken state was set by the test itself
+
+		if serverState == "busy" {
+			return
+		}
+
+		for i := 0; i < handlingPollMaxRetry; i++ {
+			_, s, _ = h.stateLocker.LockInfo()
+			switch s {
+			case statelocker.Free:
+				t.Logf("script handling finished")
+				return
+			case statelocker.InError:
+				t.Logf("script handling finished")
+				if err := os.Remove(errorFile); err != nil {
+					t.Fatalf("unable to remove file: %v", err)
+				}
+				t.Logf("error file removed")
+				return
+			}
+			time.Sleep(handlingPollInterval)
+		}
+		t.Errorf("timed out waiting for the end of script handling")
+	})
+
 }
 
 func cleanup(t *testing.T) {

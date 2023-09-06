@@ -31,6 +31,7 @@ type Config struct {
 	StorageFolder        string
 	CrioUnixSocket       string
 	CrioPreferUnixSocket bool
+	Mode                 string
 }
 
 // Start starts HTTP server with parameters in cfg structure
@@ -51,7 +52,7 @@ func Start(cfg Config) error {
 	}
 
 	network := "tcp"
-	addr := net.JoinHostPort(loopback, strconv.Itoa(cfg.Port))
+	addr := net.JoinHostPort("0.0.0.0", strconv.Itoa(cfg.Port))
 	if cfg.PreferUnixSocket {
 		network = "unix"
 		addr = cfg.UnixSocket

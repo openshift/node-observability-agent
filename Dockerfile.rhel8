@@ -1,11 +1,12 @@
-FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.19-openshift-4.12 AS builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.20-openshift-4.15 AS builder
 
 WORKDIR /go/src/github.com/openshift/node-observability-agent
 COPY . .
 
 RUN make build
 
-FROM registry.ci.openshift.org/ocp/4.12:base
+FROM registry.access.redhat.com/ubi8/ubi-init:latest
+# FROM registry.ci.openshift.org/ocp/4.13:base
 
 LABEL io.k8s.display-name="OpenShift NodeObservabilityAgent" \
       io.k8s.description="Collects node profiling data" \
@@ -16,5 +17,16 @@ RUN mkdir /run/node-observability && \
     chmod -R g=u /run/node-observability
 
 COPY --from=builder /go/src/github.com/openshift/node-observability-agent/bin/node-observability-agent /usr/bin/
+
+RUN dnf install -y tc perf psmisc hostname sysstat iotop conntrack-tools ethtool numactl net-tools
+
+RUN mkdir -p /tmp/scripts && mkdir -p /tmp/results 
+COPY scripts/metrics/* /tmp/scripts
+COPY ./uid_entrypoint.sh ./uid_entrypoint.sh
+
+EXPOSE 9000
+
 USER 65532:65532
-#TODO(alebedev): SET UP THE ENTRYPOINT TO THE OPERATOR BINARY!
+
+# this allows us to set up command and args in the deploy config
+ENTRYPOINT ["./uid_entrypoint.sh"]

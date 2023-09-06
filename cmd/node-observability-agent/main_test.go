@@ -324,5 +324,5 @@ func checkPanic(t *testing.T, tc TestCase) {
 			}
 		}
 	}()
-	checkParameters(tc.nodeIP, tc.storageFolder, tc.crioSocket, tc.preferCrioUnixSocket, tc.caCertFile)
+	checkParameters("profiling", tc.nodeIP, tc.storageFolder, tc.crioSocket, tc.preferCrioUnixSocket, tc.caCertFile)
 }

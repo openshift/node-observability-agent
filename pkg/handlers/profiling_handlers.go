@@ -22,7 +22,7 @@ const (
 )
 
 // profileCrio triggers CRIO profiling on localhost.
-func (h *Handlers) profileCrio(uid string) runs.ProfilingRun {
+func (h *Handlers) profileCrio(uid string) runs.ExecutionRun {
 	client := &http.Client{
 		Transport: newDefaultHTTPTransport().build(),
 	}
@@ -41,7 +41,7 @@ func (h *Handlers) profileCrio(uid string) runs.ProfilingRun {
 }
 
 // profileKubelet triggers Kubelet profiling on h.NodeIP using h.Token for authorization.
-func (h *Handlers) profileKubelet(uid string) runs.ProfilingRun {
+func (h *Handlers) profileKubelet(uid string) runs.ExecutionRun {
 	client := &http.Client{
 		Transport: newDefaultHTTPTransport().withRootCAs(h.CACerts).build(),
 	}
@@ -58,8 +58,8 @@ func (h *Handlers) profileKubelet(uid string) runs.ProfilingRun {
 
 // sendHTTPProfileRequest sends the http request to the given url,
 // writes the response down to the given output and returns the profiling run instance.
-func sendHTTPProfileRequest(rtype runs.RunType, method, url, token, outputPath string, client *http.Client) runs.ProfilingRun {
-	run := runs.ProfilingRun{
+func sendHTTPProfileRequest(rtype runs.RunType, method, url, token, outputPath string, client *http.Client) runs.ExecutionRun {
+	run := runs.ExecutionRun{
 		Type:      rtype,
 		BeginTime: time.Now(),
 	}

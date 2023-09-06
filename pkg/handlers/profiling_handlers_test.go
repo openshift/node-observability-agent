@@ -27,7 +27,7 @@ func TestSendHTTPProfileRequest(t *testing.T) {
 	testCases := []struct {
 		name             string
 		client           *http.Client
-		expectedRun      runs.ProfilingRun
+		expectedRun      runs.ExecutionRun
 		expectedContents string
 	}{
 		{
@@ -35,7 +35,7 @@ func TestSendHTTPProfileRequest(t *testing.T) {
 			client: newHTTPTestClient(func(req *http.Request) (*http.Response, error) {
 				return newTestResponse("OK", nil, http.StatusOK), nil
 			}),
-			expectedRun: runs.ProfilingRun{
+			expectedRun: runs.ExecutionRun{
 				Type:       runs.KubeletRun,
 				Successful: true,
 				Error:      "",
@@ -47,7 +47,7 @@ func TestSendHTTPProfileRequest(t *testing.T) {
 			client: newHTTPTestClient(func(req *http.Request) (*http.Response, error) {
 				return newTestResponse("", nil, http.StatusUnauthorized), fmt.Errorf("fake error")
 			}),
-			expectedRun: runs.ProfilingRun{
+			expectedRun: runs.ExecutionRun{
 				Type:       runs.KubeletRun,
 				Successful: false,
 				Error:      fmt.Sprintf("failed sending profiling request: %s %q: fake error", cases.Title(language.Und).String(fakeMethod), fakeURL),
@@ -58,7 +58,7 @@ func TestSendHTTPProfileRequest(t *testing.T) {
 			client: newHTTPTestClient(func(req *http.Request) (*http.Response, error) {
 				return newTestResponse("", nil, http.StatusUnauthorized), nil
 			}),
-			expectedRun: runs.ProfilingRun{
+			expectedRun: runs.ExecutionRun{
 				Type:       runs.KubeletRun,
 				Successful: false,
 				Error:      "error status code received: 401",
@@ -69,7 +69,7 @@ func TestSendHTTPProfileRequest(t *testing.T) {
 			client: newHTTPTestClient(func(req *http.Request) (*http.Response, error) {
 				return newTestResponse("OK", fmt.Errorf("fake error"), http.StatusOK), nil
 			}),
-			expectedRun: runs.ProfilingRun{
+			expectedRun: runs.ExecutionRun{
 				Type:       runs.KubeletRun,
 				Successful: false,
 				Error:      fmt.Sprintf("failed writing profiling data into file: failed to write to file .+/%s: fake error", fakeOutputFile),
