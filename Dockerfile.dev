@@ -1,5 +1,8 @@
-FROM golang:1.19 as builder
-ARG VERSION="1.19"
+# This file is meant for use with the scripting mode enabled
+
+FROM registry.access.redhat.com/ubi8/go-toolset:1.19.10 as builder
+
+ENV VERSION="1.19"
 
 WORKDIR /opt/app-root
 COPY . .
@@ -8,22 +11,16 @@ RUN go build -ldflags "-X main.version=${VERSION}" -mod vendor -o node-observabi
 
 FROM registry.access.redhat.com/ubi8/ubi-init:latest
 
-RUN mkdir /run/node-observability && \
-    chgrp -R 0 /run/node-observability && \
-    chmod -R g=u /run/node-observability
-
-COPY --from=builder /opt/app-root/node-observability-agent /usr/bin/
-
 # taken from KCS article https://access.redhat.com/solutions/5343671
 RUN dnf install -y tc perf psmisc hostname sysstat iotop conntrack-tools ethtool numactl net-tools
 
 RUN mkdir -p /tmp/scripts && mkdir -p /tmp/results 
+COPY --from=builder /opt/app-root/node-observability-agent /usr/bin/
 COPY scripts/metrics/* /tmp/scripts
 COPY ./uid_entrypoint.sh ./uid_entrypoint.sh
 
 EXPOSE 9000
 
-USER 65532:65532
-
 # this allows us to set the command and args in the deploy config
+# ./node-observability-agent --mode scripting --storage results --loglevel debug
 ENTRYPOINT ["./uid_entrypoint.sh"]

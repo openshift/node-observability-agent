@@ -26,6 +26,7 @@ var (
 	crioPreferUnixSocket = flag.Bool("crioPreferUnixSocket", true, "use unix socket to communicate to CRIO")
 	logLevel             = flag.String("loglevel", "info", "log level")
 	versionFlag          = flag.Bool("v", false, "print version")
+	mode                 = flag.String("mode", "profiling", "flag (profiling or scripting) to set mode (crio,kubelet) profiling or metrics script execution")
 )
 
 func main() {
@@ -48,22 +49,26 @@ func main() {
 	log.SetLevel(lvl)
 	log.Infof("Starting %s at log level %s", ver.MakeVersionString(), *logLevel)
 
-	checkParameters(nodeIP, *storageFolder, *crioUnixSocket, *crioPreferUnixSocket, *caCertFile)
+	checkParameters(*mode, nodeIP, *storageFolder, *crioUnixSocket, *crioPreferUnixSocket, *caCertFile)
 
-	/* #nosec G304 tokenFile is a parameter of the agent’s go program.
-	*  Upon creation of the NodeObservability CR, the operator creates a SA for the agent, sets its RBAC,
-	* and provides the tokenFile parameter in the daemonset manifest: The value provided is the default file
-	* kubernetes mounts on the node containing the SA JWT)
-	* The agent only takes the token file from that
-	 */
-	token, err := readTokenFile(*tokenFile)
-	if err != nil {
-		panic("Unable to read token file, or token is empty :" + err.Error())
-	}
+	var token string
+	var caCerts *x509.CertPool
+	if *mode == "profiling" {
+		/* #nosec G304 tokenFile is a parameter of the agent’s go program.
+		*  Upon creation of the NodeObservability CR, the operator creates a SA for the agent, sets its RBAC,
+		* and provides the tokenFile parameter in the daemonset manifest: The value provided is the default file
+		* kubernetes mounts on the node containing the SA JWT)
+		* The agent only takes the token file from that
+		 */
+		token, err = readTokenFile(*tokenFile)
+		if err != nil {
+			panic("Unable to read token file, or token is empty :" + err.Error())
+		}
 
-	caCerts, err := makeCACertPool(*caCertFile)
-	if err != nil {
-		panic("Unable to read caCerts file :" + err.Error())
+		caCerts, err = makeCACertPool(*caCertFile)
+		if err != nil {
+			panic("Unable to read caCerts file :" + err.Error())
+		}
 	}
 
 	if err := server.Start(server.Config{
@@ -76,32 +81,41 @@ func main() {
 		CrioUnixSocket:       *crioUnixSocket,
 		CrioPreferUnixSocket: *crioPreferUnixSocket,
 		NodeIP:               nodeIP,
+		Mode:                 *mode,
 	}); err != nil {
 		log.Errorf("Error from server: %s", err.Error())
 	}
 	log.Info("Stopped")
 }
 
-func checkParameters(nodeIP, storageFolder, crioUnixSocket string, crioPreferUnixSocket bool, caCertFile string) {
+func checkParameters(mode, nodeIP, storageFolder, crioUnixSocket string, crioPreferUnixSocket bool, caCertFile string) {
 	//check on configs that are passed along before starting up the server
-	//1. nodeIP is found
+	// nodeIP is found
 	if nodeIP == "" || net.ParseIP(nodeIP) == nil {
 		panic("Environment variable NODE_IP not found, or doesn't contain a valid IP address")
 	}
-	//2. StorageFolder is accessible in readwrite
+	// StorageFolder is accessible in readwrite
 	if err := syscall.Access(storageFolder, syscall.O_RDWR); err != nil {
 		panic(fmt.Sprintf("Unable to access the storage folder for saving the profiling data %q: %v", storageFolder, err))
 	}
-	//3. CRIO socket is accessible in readwrite
-	if crioPreferUnixSocket {
-		if err := syscall.Access(crioUnixSocket, syscall.O_RDWR); err != nil {
-			panic(fmt.Sprintf("Unable to access the crio socket %q: %v", crioUnixSocket, err))
+
+	if mode == "profiling" {
+		// CRIO socket is accessible in readwrite
+		if crioPreferUnixSocket {
+			if err := syscall.Access(crioUnixSocket, syscall.O_RDWR); err != nil {
+				panic(fmt.Sprintf("Unable to access the crio socket %q: %v", crioUnixSocket, err))
+			}
 		}
-	}
-	//4. CACerts file is readable
-	const R_OK uint32 = 4
-	if syscall.Access(caCertFile, R_OK) != nil {
-		panic("Unable to read the caCerts file :" + caCertFile)
+		// CACerts file is readable
+		const R_OK uint32 = 4
+		if syscall.Access(caCertFile, R_OK) != nil {
+			panic("Unable to read the caCerts file :" + caCertFile)
+		}
+
+	} else if mode == "scripting" {
+		if os.Getenv("EXECUTE_SCRIPT") == "" {
+			panic("Ensure the EXECUTE_SCRIPT envar is set (name of script to execute)")
+		}
 	}
 }
 

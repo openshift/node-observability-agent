@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
+	"github.com/openshift/node-observability-agent/pkg/connectors"
 	"github.com/openshift/node-observability-agent/pkg/runs"
 	"github.com/openshift/node-observability-agent/pkg/statelocker"
 )
@@ -21,7 +22,7 @@ import (
 const (
 	ready                    = "Service is ready"
 	httpRespErrMsg           = "unable to send response"
-	timeout           int    = 35
+	baseTimeout       int    = 35
 	logFileExt        string = "log"
 	errorFileExt      string = "err"
 	pprofFileExt      string = "pprof"
@@ -33,7 +34,7 @@ var (
 	hlog = logrus.WithField("module", "handler")
 )
 
-// Handlers holds the parameters necessary for running the CRIO and Kubelet profiling
+// Handlers holds the parameters necessary for running the CRIO, Kubelet profiling as well as scripting
 type Handlers struct {
 	Token                string
 	NodeIP               string
@@ -42,6 +43,8 @@ type Handlers struct {
 	CrioPreferUnixSocket bool
 	CACerts              *x509.CertPool
 	stateLocker          statelocker.StateLocker
+	Connector            connectors.CmdWrapper
+	Mode                 string
 }
 
 // NewHandlers creates a new instance of Handlers from the given parameters
@@ -53,6 +56,19 @@ func NewHandlers(token string, caCerts *x509.CertPool, storageFolder string, cri
 		StorageFolder:        storageFolder,
 		CrioUnixSocket:       crioUnixSocket,
 		CrioPreferUnixSocket: crioPreferUnixSocket,
+		Mode:                 "profiling",
+	}
+	h.stateLocker = statelocker.NewStateLock(h.errorOutputFilePath())
+	return h
+}
+
+// NewScriptingHandlers creates a new instance of Handlers from the given parameters
+func NewScriptingHandlers(storageFolder string, nodeIP string) *Handlers {
+	h := &Handlers{
+		NodeIP:        nodeIP,
+		StorageFolder: storageFolder,
+		Connector:     &connectors.Connector{},
+		Mode:          "scripting",
 	}
 	h.stateLocker = statelocker.NewStateLock(h.errorOutputFilePath())
 	return h
@@ -82,7 +98,7 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case statelocker.Taken:
-		hlog.Infof("previous profiling is still ongoing, runID: %s", id.String())
+		hlog.Infof("previous execution is still ongoing, runID: %s", id.String())
 		err := respondBusyOrError(id.String(), w, false)
 		if err != nil {
 			http.Error(w, httpRespErrMsg, http.StatusInternalServerError)
@@ -103,7 +119,7 @@ func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
 // it triggers the kubelet and CRIO profiling in separate goroutines, and launches a separate
 // function to process the results in a goroutine as well
 func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
-	hlog.Info("start handling profiling request")
+	hlog.Info("start handling execution request")
 
 	uid, state, err := h.stateLocker.Lock()
 	if err != nil {
@@ -126,7 +142,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		}
 	case statelocker.Taken:
 		{
-			hlog.Infof("previous profiling is still ongoing, runID: %s", uid.String())
+			hlog.Infof("previous execution is still ongoing, runID: %s", uid.String())
 			err := respondBusyOrError(uid.String(), w, false)
 			if err != nil {
 				http.Error(w, httpRespErrMsg, http.StatusInternalServerError)
@@ -139,7 +155,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 		{
 			hlog.Infof("ready to initiate profiling, runID: %s", uid.String())
 			// Channel for collecting results of profiling
-			runResultsChan := make(chan runs.ProfilingRun)
+			runResultsChan := make(chan runs.ExecutionRun)
 
 			// Launch both profilings in parallel as well as the routine to wait for results
 			go func() {
@@ -150,7 +166,7 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 				runResultsChan <- h.profileCrio(uid.String())
 			}()
 
-			go h.processResults(uid, runResultsChan)
+			go h.processResults(uid, runResultsChan, baseTimeout)
 			// Send a HTTP 200 straight away
 			err := sendUID(w, uid)
 			if err != nil {
@@ -159,13 +175,71 @@ func (h *Handlers) HandleProfiling(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
 }
 
-func (h *Handlers) processResults(uid uuid.UUID, runResultsChan chan runs.ProfilingRun) {
+// HandleScripting is called when the agent receives an HTTP request on endpoint /scripting
+// After checking the agent is not in error, and that no previous profiling is still ongoing,
+// it triggers the embedded script in a separate goroutine, and launches a separate
+// function to process the results in a goroutine as well
+func (h *Handlers) HandleScripting(w http.ResponseWriter, r *http.Request) {
+	uid, state, err := h.stateLocker.Lock()
+	if err != nil {
+		http.Error(w, "service is either busy or in error, try again",
+			http.StatusInternalServerError)
+		hlog.Error(err)
+		return
+	}
+
+	switch state {
+	case statelocker.InError:
+		{
+			err := respondBusyOrError(uid.String(), w, true)
+			if err != nil {
+				http.Error(w, httpRespErrMsg,
+					http.StatusInternalServerError)
+				hlog.Error(httpRespErrMsg)
+				return
+			}
+			return
+		}
+	case statelocker.Taken:
+		{
+			err := respondBusyOrError(uid.String(), w, false)
+			if err != nil {
+				http.Error(w, httpRespErrMsg,
+					http.StatusInternalServerError)
+				hlog.Error(httpRespErrMsg)
+				return
+			}
+			return
+		}
+	case statelocker.Free:
+		{
+
+			// Channel for collecting results of metrics
+			runResultsChan := make(chan runs.ExecutionRun)
+
+			// Launch metrics script as the routine to wait for results
+			go func() {
+				h.Connector.Prepare("sh", []string{"-c", os.Getenv("EXECUTE_SCRIPT")})
+				runResultsChan <- h.executeScript(uid.String(), h.Connector)
+			}()
+
+			go h.processResults(uid, runResultsChan, 7200)
+			// Send a HTTP 200 straight away
+			err := sendUID(w, uid)
+			if err != nil {
+				hlog.Error(err)
+				return
+			}
+		}
+	}
+}
+
+func (h *Handlers) processResults(uid uuid.UUID, runResultsChan chan runs.ExecutionRun, timeout int) {
 	arun := runs.Run{
 		ID:            uid,
-		ProfilingRuns: []runs.ProfilingRun{},
+		ExecutionRuns: []runs.ExecutionRun{},
 	}
 	// unlock as soon as finished processing
 	defer func() {
@@ -175,40 +249,59 @@ func (h *Handlers) processResults(uid uuid.UUID, runResultsChan chan runs.Profil
 		}
 		close(runResultsChan)
 	}()
-	// wait for the results
-	arun.ProfilingRuns = []runs.ProfilingRun{}
-	isTimeout := false
 
-	hlog.Infof("start processing results of profiling requests, runID: %s", uid.String())
-	for nb := 0; nb < 2 && !isTimeout; {
+	if h.Mode == "profiling" {
+		// wait for the results
+		arun.ExecutionRuns = []runs.ExecutionRun{}
+		isTimeout := false
+
+		hlog.Infof("start processing results of profiling requests, runID: %s", uid.String())
+		for nb := 0; nb < 2 && !isTimeout; {
+			select {
+			case er := <-runResultsChan:
+				nb++
+				arun.ExecutionRuns = append(arun.ExecutionRuns, er)
+			case <-time.After(time.Second * time.Duration(timeout)):
+				//timeout! dont wait anymore
+				erInTimeout := runs.ExecutionRun{
+					Type:       runs.UnknownRun,
+					Successful: false,
+					BeginTime:  time.Now(),
+					EndTime:    time.Now(),
+					Error:      fmt.Sprintf("timeout after waiting %ds", timeout),
+				}
+				erInTimeout.Error = fmt.Sprintf("timeout after waiting %ds", timeout)
+				arun.ExecutionRuns = append(arun.ExecutionRuns, erInTimeout)
+				isTimeout = true
+			}
+		}
+	} else {
 		select {
-		case pr := <-runResultsChan:
-			nb++
-			arun.ProfilingRuns = append(arun.ProfilingRuns, pr)
+		case er := <-runResultsChan:
+			arun.ExecutionRuns = append(arun.ExecutionRuns, er)
 		case <-time.After(time.Second * time.Duration(timeout)):
 			//timeout! dont wait anymore
-			prInTimeout := runs.ProfilingRun{
+			erInTimeout := runs.ExecutionRun{
 				Type:       runs.UnknownRun,
 				Successful: false,
 				BeginTime:  time.Now(),
 				EndTime:    time.Now(),
 				Error:      fmt.Sprintf("timeout after waiting %ds", timeout),
 			}
-			prInTimeout.Error = fmt.Sprintf("timeout after waiting %ds", timeout)
-			arun.ProfilingRuns = append(arun.ProfilingRuns, prInTimeout)
-			isTimeout = true
+			erInTimeout.Error = fmt.Sprintf("timeout after waiting %ds", timeout)
+			arun.ExecutionRuns = append(arun.ExecutionRuns, erInTimeout)
 		}
 	}
 
 	// Process the results
 	var errorMessage bytes.Buffer
 	var logMessage bytes.Buffer
-	for _, profRun := range arun.ProfilingRuns {
-		if profRun.Error != "" {
-			errorMessage.WriteString("errors encountered while running " + string(profRun.Type) + " - " + arun.ID.String() + ":\n")
-			errorMessage.WriteString(profRun.Error + "\n")
+	for _, execRun := range arun.ExecutionRuns {
+		if execRun.Error != "" {
+			errorMessage.WriteString("errors encountered while running " + string(execRun.Type) + " - " + arun.ID.String() + ":\n")
+			errorMessage.WriteString(execRun.Error + "\n")
 		}
-		logMessage.WriteString("successfully finished running " + string(profRun.Type) + " - " + arun.ID.String() + ": " + profRun.BeginTime.String() + " -> " + profRun.EndTime.String() + " ")
+		logMessage.WriteString("successfully finished executing mode '" + string(execRun.Type) + "' - " + arun.ID.String() + ": " + execRun.BeginTime.String() + " -> " + execRun.EndTime.String() + " ")
 	}
 
 	if errorMessage.Len() > 0 {
