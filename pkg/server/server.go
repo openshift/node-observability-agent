@@ -52,7 +52,7 @@ func Start(cfg Config) error {
 	}
 
 	network := "tcp"
-	addr := net.JoinHostPort("0.0.0.0", strconv.Itoa(cfg.Port))
+	addr := net.JoinHostPort(loopback, strconv.Itoa(cfg.Port))
 	if cfg.PreferUnixSocket {
 		network = "unix"
 		addr = cfg.UnixSocket
