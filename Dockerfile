@@ -1,12 +1,12 @@
-FROM golang:1.19 as builder
-ARG VERSION="1.19"
+FROM golang:1.21 as builder
+ARG VERSION="1.21"
 
 WORKDIR /opt/app-root
 COPY . .
 
 RUN go build -ldflags "-X main.version=${VERSION}" -mod vendor -o node-observability-agent cmd/node-observability-agent/main.go
 
-FROM registry.access.redhat.com/ubi8/ubi-init:latest
+FROM registry.access.redhat.com/ubi9/ubi-init:latest
 
 RUN mkdir /run/node-observability && \
     chgrp -R 0 /run/node-observability && \
