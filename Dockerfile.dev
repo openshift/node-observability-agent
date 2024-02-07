@@ -1,15 +1,15 @@
 # This file is meant for use with the scripting mode enabled
 
-FROM registry.access.redhat.com/ubi8/go-toolset:1.19.10 as builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.21.10 as builder
 
-ENV VERSION="1.19"
+ENV VERSION="1.21"
 
 WORKDIR /opt/app-root
 COPY . .
 
 RUN go build -ldflags "-X main.version=${VERSION}" -mod vendor -o node-observability-agent cmd/node-observability-agent/main.go
 
-FROM registry.access.redhat.com/ubi8/ubi-init:latest
+FROM registry.access.redhat.com/ubi9/ubi-init:latest
 
 # taken from KCS article https://access.redhat.com/solutions/5343671
 RUN dnf install -y tc perf psmisc hostname sysstat iotop conntrack-tools ethtool numactl net-tools
